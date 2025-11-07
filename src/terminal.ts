@@ -1,0 +1,334 @@
+
+import { CompositeDisposable, Pane, TextEditorElement, WorkspaceOpenOptions } from  'atom';
+import { Config, getConfigSchema } from './config';
+import { TerminalElement } from './element';
+import { TerminalModel } from './model';
+import { BASE_URI, ProfileData, Profiles } from './profiles';
+
+type OpenOptions = WorkspaceOpenOptions & {
+  target?: HTMLElement
+};
+
+export default class Terminal {
+
+  static disposables: CompositeDisposable;
+  static terminals: Set<TerminalModel>;
+
+  static config: Record<string, unknown> = getConfigSchema();
+
+  static activate (_state: unknown) {
+    console.warn('Terminal activate!', _state)
+    Profiles.resetBaseProfile();
+    this.disposables = new CompositeDisposable();
+    this.terminals = new Set();
+
+    // for (let data of CONFIG_DATA) {
+    //   this.disposables.add(
+    //     atom.config.onDidChange(
+    //       data.keyPath,
+    //       () => Profiles.resetBaseProfile()
+    //     )
+    //   );
+    // }
+
+    this.disposables.add(
+      atom.config.onDidChange(
+        'editor.fontFamily',
+        () => Profiles.resetBaseProfile()
+      )
+    );
+
+    this.disposables.add(
+      // Register view provider for the terminal emulator.
+      atom.views.addViewProvider(TerminalModel, (model) => {
+        let element = new TerminalElement();
+        element.initialize(model as TerminalModel);
+        return element;
+      }),
+
+      // Register view provider for the terminal emulator profile menu item.
+
+      // ... et cetera
+
+      // Add an opener for the terminal emulator.
+      atom.workspace.addOpener((uri: string) => {
+        if (!uri.startsWith(BASE_URI)) return undefined;
+        let item = new TerminalModel({
+          uri,
+          terminals: this.terminals
+        });
+        return item;
+      }),
+
+      // Set a callback to run on current and future panes.
+      atom.workspace.observePanes((pane) => {
+        // In callback, set another callback to run on current and future
+        // items.
+        this.disposables.add(
+          pane.observeItems((item) => {
+            if (TerminalModel.is(item)) {
+              item.moveToPane(pane);
+            }
+            // TODO: Recalculate active?
+          })
+        )
+        // TODO: Recalculate active?
+      }),
+
+      // Add callbacks to run for current and future active items on active
+      // panes.
+      atom.workspace.observeActivePaneItem((item) => {
+        // Move focus into the terminal when the item is a terminal item.
+        if (TerminalModel.is(item)) {
+          item.focusTerminal();
+        }
+        // TODO: Recalculate active?
+      }),
+
+      // Commands.
+      atom.commands.add('atom-workspace', {
+        'terminal:open': () => {
+          this.open(
+            Profiles.generateUri(),
+            this.addDefaultPosition()
+          );
+        },
+
+        'terminal:open-center': () => {
+          this.openInCenterOrDock(atom.workspace);
+        },
+        'terminal:open-split-up': () => {
+          this.open(Profiles.generateUri(), { split: 'up' });
+        },
+        'terminal:open-split-down': () => {
+          this.open(Profiles.generateUri(), { split: 'down' });
+        },
+        'terminal:open-split-left': () => {
+          this.open(Profiles.generateUri(), { split: 'left' });
+        },
+        'terminal:open-split-right': () => {
+          this.open(Profiles.generateUri(), { split: 'right' });
+        },
+        'terminal:open-split-bottom-dock': () => {
+          this.openInCenterOrDock(atom.workspace.getBottomDock());
+        },
+        'terminal:open-split-left-dock': () => {
+          this.openInCenterOrDock(atom.workspace.getLeftDock());
+        },
+        'terminal:open-split-right-dock': () => {
+          this.openInCenterOrDock(atom.workspace.getRightDock());
+        },
+        'terminal:toggle-profile-menu': () => {
+          this.toggleProfileMenu();
+        },
+        // TODO: Reorganize?
+        'terminal:close-all': () => {
+          this.exitAllTerminals();
+        },
+        'terminal:insert-selected-text': () => {
+          this.insertSelection();
+        },
+        'terminal:run-selected-text': () => {
+          this.runSelection();
+        },
+        'terminal:focus': () => {
+          this.focus();
+        }
+      })
+    );
+
+    let docks = [
+      atom.workspace.getRightDock(),
+      atom.workspace.getLeftDock(),
+      atom.workspace.getBottomDock()
+    ];
+
+    let dockDisposables = docks.map((dock) => {
+      return dock.observeVisible((visible) => {
+        if (visible) {
+          let item = dock.getActivePaneItem();
+          if (TerminalModel.is(item)) {
+            item.focusTerminal();
+          }
+        }
+        // TODO: Recalculate active?
+      })
+    });
+
+    this.disposables.add(...dockDisposables);
+  }
+
+  static async open (uri: string, options: OpenOptions = {}) {
+    let url = new URL(uri);
+    if (url.searchParams.get('relaunchTerminalOnStartup') === null) {
+      url.searchParams.set('relaunchTerminalOnStartup', 'false');
+    }
+
+    if (options.target) {
+      let target = this.getPath(options.target);
+      if (target) {
+        url.searchParams.set('cwd', target);
+      }
+    }
+
+    return await atom.workspace.open(url.href, options);
+  }
+
+  static openTerminal (profile: ProfileData | undefined = undefined, options: OpenOptions = {}) {
+    options = this.addDefaultPosition(options);
+    return this.open(
+      Profiles.generateUriFromProfileData(profile).toString(),
+      options
+    );
+  }
+
+  static async openInCenterOrDock (
+    centerOrDock: { getActivePane(): Pane },
+    options: OpenOptions = {}
+  ) {
+    let pane = centerOrDock.getActivePane();
+    if (pane) options.pane = pane;
+
+    return await this.open(Profiles.generateUri(), options);
+  }
+
+  static getPath (target: HTMLElement | undefined | null) {
+    if (!target) {
+      let [firstPath] = atom.project.getPaths();
+      return firstPath ?? null;
+    }
+
+    let treeView = target.closest('.tree-view') as HTMLElement | undefined;
+    if (treeView) {
+      let selected = treeView.querySelector(
+        '.selected > .list-item > .name, .selected > .name'
+      ) as HTMLElement | undefined;
+      return selected?.dataset.path ?? null;
+    }
+
+    let tab = target.closest('.tab-bar > tab') as HTMLElement | undefined;
+    if (tab) {
+      let title = tab.querySelector('.title') as HTMLElement | undefined;
+      return title?.dataset.path ?? null;
+    }
+
+    let textEditor = target.closest('atom-text-editor') as TextEditorElement | undefined;
+    if (textEditor && typeof textEditor.getModel === 'function') {
+      let model = textEditor.getModel();
+      return model.getPath?.() ?? null;
+    }
+
+    return null;
+  }
+
+  static addDefaultPosition (options: OpenOptions = {}) {
+    let position = Config.get('behavior.defaultContainer');
+    switch (position) {
+      case 'Center': {
+        let pane = atom.workspace.getActivePane();
+        if (pane && !('pane' in options)) {
+          options.pane = pane;
+        }
+        break;
+      }
+      case 'Split Up':
+        if (!('split' in options)) {
+          options.split = 'up';
+        }
+        break;
+      case 'Split Down':
+        if (!('split' in options)) {
+          options.split = 'down';
+        }
+        break;
+      case 'Split Left':
+        if (!('split' in options)) {
+          options.split = 'left';
+        }
+        break;
+      case 'Split Right':
+        if (!('split' in options)) {
+          options.split = 'right';
+        }
+        break;
+      case 'Bottom Dock': {
+        let pane = atom.workspace.getBottomDock().getActivePane();
+        if (pane && !('pane' in options)) {
+          options.pane = pane;
+        }
+        break;
+      }
+      case 'Left Dock': {
+        let pane = atom.workspace.getLeftDock().getActivePane();
+        if (pane && !('pane' in options)) {
+          options.pane = pane;
+        }
+        break;
+      }
+      case 'Right Dock': {
+        let pane = atom.workspace.getRightDock().getActivePane();
+        if (pane && !('pane' in options)) {
+          options.pane = pane;
+        }
+        break;
+      }
+    }
+    return options;
+  }
+
+  static toggleProfileMenu () {
+    // TODO
+  }
+
+  static exitAllTerminals () {
+    // TODO
+  }
+
+  static insertSelection () {
+    // TODO
+  }
+
+  static runSelection () {
+    // TODO
+  }
+
+  static focus () {
+    if (this.terminals.size === 0) {
+      this.openTerminal();
+      return;
+    }
+
+    let activeTerminal = Array.from(this.terminals)
+      .find(term => term.activeIndex === 0);
+    activeTerminal?.focusTerminal(true);
+  }
+
+  static focusNext () {
+    if (this.terminals.size === 0) {
+      this.openTerminal();
+      return;
+    }
+
+    let list = Array.from(this.terminals);
+    let nextIndex = list.findIndex(t => t.activeIndex === 0) + 1;
+    if (nextIndex >= list.length) {
+      nextIndex -= list.length;
+    }
+    list[nextIndex].focusTerminal(true);
+  }
+
+  static focusPrevious () {
+    if (this.terminals.size === 0) {
+      this.openTerminal();
+      return;
+    }
+
+    let list = Array.from(this.terminals);
+    let prevIndex = list.findIndex(t => t.activeIndex === 0) - 1;
+    if (prevIndex < 0) {
+      prevIndex += list.length;
+    }
+    list[prevIndex].focusTerminal(true);
+  }
+
+}

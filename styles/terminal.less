@@ -1,0 +1,28 @@
+// The ui-variables file is provided by base themes provided by Atom.
+//
+// See https://github.com/atom/atom-dark-ui/blob/master/styles/ui-variables.less
+// for a full listing of what's available.
+@import "ui-variables";
+@import "octicon-mixins";
+@import "syntax-variables";
+
+pulsar-terminal {
+  display: flex;
+  flex-direction: column;
+}
+
+.terminal__main {
+  height: 95%;
+  width: auto;
+  flex: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.terminal__terminal {
+  flex-grow: 1;
+}
+
+// Load the static styles here.
+/* stylelint-disable-next-line */
+@import (less) "../node_modules/@xterm/xterm/css/xterm.css";

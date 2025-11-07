@@ -1,0 +1,26 @@
+{
+  ".platform-darwin atom-workspace": {
+    "cmd-alt-`": "terminal:open",
+    "cmd-alt-~ up": "terminal:open-split-up",
+    "cmd-alt-~ down": "terminal:open-split-down",
+    "cmd-alt-~ left": "terminal:open-split-left",
+    "cmd-alt-~ right": "terminal:open-split-right",
+    "cmd-alt-~ b": "terminal:open-split-bottom-dock",
+    "cmd-alt-~ l": "terminal:open-split-left-dock",
+    "cmd-alt-~ r": "terminal:open-split-right-dock",
+    "cmd-alt-~ x": "terminal:run-selected-text",
+    "cmd-alt-~ i": "terminal:insert-selected-text"
+  },
+  ".platform-win32 atom-workspace, .platform-linux .atom-workspace": {
+    "ctrl-`": "terminal:open",
+    "ctrl-~ up": "terminal:open-split-up",
+    "ctrl-~ down": "terminal:open-split-down",
+    "ctrl-~ left": "terminal:open-split-left",
+    "ctrl-~ right": "terminal:open-split-right",
+    "ctrl-~ b": "terminal:open-split-bottom-dock",
+    "ctrl-~ l": "terminal:open-split-left-dock",
+    "ctrl-~ r": "terminal:open-split-right-dock",
+    "ctrl-~ x": "terminal:run-selected-text",
+    "ctrl-~ i": "terminal:insert-selected-text"
+  }
+}
