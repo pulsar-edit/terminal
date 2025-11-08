@@ -135,12 +135,10 @@ export default class FindPalette {
     this.subscriptions.add(
       editor.onDidChange(() => {
         let search = editor.getText();
-        console.log('[FindPalette] Updating search term to:', search);
         this.update({ term: search });
       })
     )
     this.observedEditors.add(editor);
-    console.warn('[FindPalette] ADDED editor subscription!');
   }
 
   render () {

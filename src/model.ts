@@ -137,7 +137,6 @@ export class TerminalModel {
       this.url.searchParams.set('cwd', cwd);
     }
   }
-
   serialize () {
     return {
       deserializer: 'TerminalModel',

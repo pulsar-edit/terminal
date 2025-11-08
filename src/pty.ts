@@ -117,7 +117,6 @@ export class Pty {
   }
 
   async start () {
-    console.log('[Terminal] PTY start!');
     let options: SpawnOptionsWithoutStdio = {};
 
     options.env ??= Object.create(process.env);
@@ -167,44 +166,21 @@ export class Pty {
     this.process.stderr!
       .pipe(ndjson.parse({ strict: false }))
       .on('data', (obj: PtyMessage) => {
-        console.log('[Terminal] stderr data!', obj);
         if (obj.type !== 'error') return;
         this.emitter.emit('error', obj.payload);
       });
 
-    this.process.on('error', (x) => {
-      console.error('[Terminal] ERROR!', x);
+    this.process.on('error', (err) => {
+      console.error('[Terminal] Error from PTY:', err);
       this.error = true;
       readyReject();
     });
 
-    console.log('[Terminal] Waiting for ready…');
-
     await timeout(readyPromise, 5000);
-    console.log('[Terminal] …waited!');
-
-    // let spawned = new Promise<void>((resolve, reject) => {
-    //   this.process.on('spawn', () => {
-    //     // The `spawn` event will fire whether the spawn was successful or
-    //     // unsuccessful. This strategy relies on `error` firing _before_
-    //     // `spawn` in the latter case; if this isn't always true, we should try
-    //     // a different strategy, like having the worker send an event when it's
-    //     // ready.
-    //     if (this.error) {
-    //       reject(new Error('Failed to spawn PTY'));
-    //     } else {
-    //       resolve();
-    //     }
-    //   });
-    // });
-    //
-    // await spawned;
 
     if (!this.process.stdin) {
       throw new Error('Failed to spawn PTY');
     }
-
-    console.log('[Terminal] PID:', this.process.pid);
 
     let spawnMessage: PtyMessage = {
       type: 'spawn',

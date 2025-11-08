@@ -3,7 +3,7 @@ import { CommandEvent, CompositeDisposable, Pane, TextEditorElement, WorkspaceOp
 import { Config, getConfigSchema } from './config';
 import { TerminalElement } from './element';
 import { TerminalModel } from './model';
-import { BASE_URI, debounce, recalculateActive, generateUri } from './utils';
+import { BASE_URI, debounce, recalculateActive, generateUri, PACKAGE_NAME } from './utils';
 import crypto from 'crypto';
 
 type OpenOptions = WorkspaceOpenOptions & {
@@ -17,7 +17,10 @@ export default class Terminal {
 
   static config: Record<string, unknown> = getConfigSchema();
 
+  static activated: boolean = false;
+
   static activate (_state: unknown) {
+    this.activated = true;
     this.subscriptions = new CompositeDisposable();
     this.terminals = new Set();
 
@@ -273,14 +276,10 @@ export default class Terminal {
 
   static async open (uri: string, options: OpenOptions = {}): Promise<TerminalModel> {
     let url = new URL(uri);
-    if (url.searchParams.get('relaunchTerminalOnStartup') === null) {
-      url.searchParams.set('relaunchTerminalOnStartup', 'false');
-    }
-
-    if (options.target) {
-      let target = this.getPath(options.target);
-      if (target) {
-        url.searchParams.set('cwd', target);
+    if (options.target && (options.target instanceof HTMLElement) && !url.searchParams.has('cwd')) {
+      let cwd = this.getPath(options.target);
+      if (cwd) {
+        url.searchParams.set('cwd', cwd);
       }
     }
 
@@ -426,7 +425,10 @@ export default class Terminal {
   }
 
   static deserializeTerminalModel (serializedModel: { uri: string }) {
-    console.warn('[Terminal] deserializeTerminalModel:', serializedModel);
+    // TODO: Because config schema is provided at runtime, we must activate
+    // this package before we can read the `relaunchTerminalsOnStartup` value.
+    // This contradicts our stated desire to wait to activate until the
+    // `core:loaded-shell-environment` hook. Look for a way around this.
     let pack = atom.packages.enablePackage('terminal');
     if (!pack) return;
     // @ts-ignore Undocumented.
@@ -434,13 +436,11 @@ export default class Terminal {
     // @ts-ignore Undocumented.
     pack.activateNow();
 
-    // if (!Config.get('terminal.allowRelaunchingOnStartup')) return;
-    let url = new URL(serializedModel.uri);
-    // let relaunch = url.searchParams.get('relaunchTerminalOnStartup');
-    // if (relaunch === 'false') return;
-
+    if (!Config.get('behavior.relaunchTerminalsOnStartup')) {
+      return;
+    }
     return new TerminalModel({
-      uri: url.href,
+      uri: serializedModel.uri,
       terminals: this.terminals
     });
   }

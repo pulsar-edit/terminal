@@ -2,7 +2,7 @@ import fs from 'fs-extra';
 
 import { CompositeDisposable, Disposable } from 'atom';
 import { TerminalModel } from './model';
-import { Config, CONFIG_DEFAULTS } from './config';
+import { Config } from './config';
 
 import { ITheme, Terminal as XTerminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
@@ -173,14 +173,15 @@ export class TerminalElement extends HTMLElement {
       //   (event) => {
       //     if (!event.ctrlKey) return;
       //     if (!atom.config.get('editor.zoomFontWhenCtrlScrolling')) return;
+      //     let fontSizeSchema = atom.config.getSchema('terminal.appearance.fontSize');
       //     event.stopPropagation();
       //
       //     let delta = event.deltaY < 0 ? 1 : -1;
       //     let fontSize = Config.get('appearance.fontSize') + delta;
-      //     if (fontSize < CONFIG_DEFAULTS.minimumFontSize) {
-      //       fontSize = CONFIG_DEFAULTS.minimumFontSize;
-      //     } else if (fontSize > CONFIG_DEFAULTS.maximumFontSize) {
-      //       fontSize = CONFIG_DEFAULTS.maximumFontSize;
+      //     if (fontSize < fontSizeSchema.minimum) {
+      //       fontSize = fontSizeSchema.minimum;
+      //     } else if (fontSize > fontSizeSchema.maximum) {
+      //       fontSize = fontSizeSchema.maximum;
       //     }
       //     Config.set('appearance.fontSize', fontSize);
       //   },
@@ -600,8 +601,6 @@ export class TerminalElement extends HTMLElement {
       return
     }
     if (this.#ptyMeta.cols !== geometry.cols || this.#ptyMeta.rows !== geometry.rows) {
-      // console.log('[Terminal] Existing dimensions are, by contrast,', this.#ptyMeta.cols, 'and', this.#ptyMeta.rows);
-      // console.warn('RESIZING TO', geometry.cols, geometry.rows);
       this.pty.resize(geometry.cols, geometry.rows);
       this.#ptyMeta.cols = geometry.cols;
       this.#ptyMeta.rows = geometry.rows;

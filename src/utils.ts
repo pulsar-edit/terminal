@@ -14,6 +14,7 @@ export function isLinux () {
 }
 
 export const BASE_URI = `terminal://`;
+export const PACKAGE_NAME = 'terminal';
 
 export function withResolvers<T extends unknown = void>(): {
   promise: Promise<T>,
