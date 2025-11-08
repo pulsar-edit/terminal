@@ -19,18 +19,8 @@ export default class Terminal {
 
   static activate (_state: unknown) {
     console.warn('Terminal activate!', _state)
-    Profiles.resetBaseProfile();
     this.disposables = new CompositeDisposable();
     this.terminals = new Set();
-
-    // for (let data of CONFIG_DATA) {
-    //   this.disposables.add(
-    //     atom.config.onDidChange(
-    //       data.keyPath,
-    //       () => Profiles.resetBaseProfile()
-    //     )
-    //   );
-    // }
 
     this.disposables.add(
       atom.config.onDidChange(
@@ -70,10 +60,10 @@ export default class Terminal {
             if (TerminalModel.is(item)) {
               item.moveToPane(pane);
             }
-            // TODO: Recalculate active?
+            recalculateActive(this.terminals);
           })
         )
-        // TODO: Recalculate active?
+        recalculateActive(this.terminals);
       }),
 
       // Add callbacks to run for current and future active items on active
@@ -83,7 +73,7 @@ export default class Terminal {
         if (TerminalModel.is(item)) {
           item.focusTerminal();
         }
-        // TODO: Recalculate active?
+        recalculateActive(this.terminals);
       }),
 
       // Commands.
@@ -117,9 +107,6 @@ export default class Terminal {
         },
         'terminal:open-split-right-dock': () => {
           this.openInCenterOrDock(atom.workspace.getRightDock());
-        },
-        'terminal:toggle-profile-menu': () => {
-          this.toggleProfileMenu();
         },
         // TODO: Reorganize?
         'terminal:close-all': () => {
@@ -161,6 +148,38 @@ export default class Terminal {
         let element = this.inferTerminalElement(event);
         if (!element) return;
         element.clear();
+      },
+      'terminal:find': (event) => {
+        let element = this.inferTerminalElement(event);
+        if (!element) return;
+
+        let didShow = element.showFind();
+        if (!didShow) event.abortKeyBinding();
+      },
+      'terminal:find-next': (event) => {
+        let element = this.inferTerminalElement(event);
+        if (!element) return;
+
+        let didRespond = element.findNext();
+        if (!didRespond) event.abortKeyBinding();
+      },
+      'terminal:find-previous': (event) => {
+        let element = this.inferTerminalElement(event);
+        if (!element) return;
+
+        let didRespond = element.findPrevious();
+        if (!didRespond) event.abortKeyBinding();
+      }
+
+    });
+
+    atom.commands.add('.terminal-find-palette atom-text-editor', {
+      'core:cancel': (event) => {
+        let element = this.inferTerminalElement(event);
+        if (!element) return;
+
+        let didHide = element.hideFind();
+        if (!didHide) event.abortKeyBinding();
       }
     });
 
@@ -309,10 +328,6 @@ export default class Terminal {
       }
     }
     return options;
-  }
-
-  static toggleProfileMenu () {
-    // TODO
   }
 
   static deactivate () {

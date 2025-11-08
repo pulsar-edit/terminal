@@ -1,0 +1,54 @@
+// This file ensures these terminal variables are defined. By default, it tries
+// to make your terminal colors match your editor colors as much as possible.
+//
+// This file is loaded before `syntax-variables`, so anything that is consulted
+// when loading `syntax-variables` — namely your syntax theme and your user
+// stylesheet — has a chance to override these values.
+
+// Basics
+// ======
+
+// The ordinary text color of the terminal.
+@terminal-text-color: @syntax-text-color;
+// The background color of the terminal.
+@terminal-background-color: @syntax-background-color;
+// The background color of a selected text block.
+@terminal-selection-background-color: @syntax-selection-color;
+// The text color of selected text.
+@terminal-selection-text-color: @syntax-text-color;
+// The color of the cursor.
+@terminal-cursor-color: @syntax-cursor-color;
+
+// The color of the outline around a “find” result when it is inactive.
+@terminal-result-marker-color: @syntax-result-marker-color;
+// The color of the outline around a “find” result when it is active.
+@terminal-result-marker-color-selected: @syntax-result-marker-color-selected;
+
+// ANSI Colors
+// ===========
+//
+// These colors don't necessarily have analogs in your syntax theme. If you
+// maintain a syntax theme, you are encouraged to set these values to the
+// nearest equivalent colors in your theme.
+
+@terminal-color-black: #2e3436;
+@terminal-color-red: #cc0000;
+@terminal-color-green: #4e9a06;
+@terminal-color-yellow: #c4a000;
+@terminal-color-blue: #3465a4;
+@terminal-color-magenta: #75507b;
+@terminal-color-cyan: #06989a;
+@terminal-color-white: #d3d7cf;
+
+// The "bright" versions of colors can be used for emphasis instead of bold
+// text. If you prefer for emphasis to be communicated solely through font
+// weight, you can pass `{ "drawBoldTextInBrightColors": false }` for the
+// `terminal.xterm.additionalOptions` setting.
+@terminal-color-bright-black: #555753;
+@terminal-color-bright-red: #ef2929;
+@terminal-color-bright-green: #8ae234;
+@terminal-color-bright-yellow: #fce94f;
+@terminal-color-bright-blue: #729fcf;
+@terminal-color-bright-magenta: #ad7fa8;
+@terminal-color-bright-cyan: #34e2e2;
+@terminal-color-bright-white: #eeeeec;

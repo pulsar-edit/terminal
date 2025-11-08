@@ -221,12 +221,14 @@ export function getConfigSchema () {
       order: 0,
       properties: {
         activeTerminalIndicator: {
+          title: 'Active Terminal Indicator',
           description: `Character(s) to use to indicate the active terminal.`,
           type: 'string',
           default: '⦿ ',
           order: 0
         },
         command: {
+          title: 'Command',
           description: `Command to run to initialize the shell.`,
           type: 'string',
           default: defaultTerminalCommand,
@@ -240,6 +242,7 @@ export function getConfigSchema () {
           order: 2
         },
         terminalType: {
+          title: 'Terminal Type',
           description: 'The type of terminal to use.',
           type: 'string',
           default: process.env.TERM || 'xterm-256color',
@@ -259,33 +262,41 @@ export function getConfigSchema () {
           default: true,
           order: 5
         },
-        fallbackEnv: {
-          title: 'Fallback Environment Variables',
-          description: `Environment variables that should always be present, even if the environment does not define them. (Accepts a stringified JSON object.)`,
-          type: 'string',
-          default: '{}',
-          order: 6
-        },
-        overrideEnv: {
-          title: 'Overridden Environment Variables',
-          description: `Environment variables that should always be present _and_ take precedence over values that may already be defined in the environment. (Accepts a stringified JSON object.)`,
-          type: 'object',
-          default: '{}',
-          order: 7
-        },
-        deleteEnv: {
-          title: 'Deleted Environment Variables',
-          description: `Environment variables that should be deleted from a terminal environment whenever present on startup. (Separate multiple entries with commas.)`,
-          type: 'array',
-          default: ['NODE_ENV'],
-          order: 8
-        },
         encoding: {
           title: 'Character Encoding',
           description: 'The encoding to use in a spawned terminal.',
           type: 'string',
           default: 'utf8',
-          order: 9
+          order: 6
+        },
+        env: {
+          title: 'Environment Variables',
+          description: 'Define, override, or delete certain environment variables within the shell.',
+          type: 'object',
+          order: 7,
+          properties: {
+            fallbackEnv: {
+              title: 'Fallback',
+              description: `Environment variables that should always be present, even if the environment does not define them. (Accepts a stringified JSON object.)`,
+              type: 'string',
+              default: '{}',
+              order: 6
+            },
+            overrideEnv: {
+              title: 'Overridden',
+              description: `Environment variables that should always be present _and_ take precedence over values that may already be defined in the environment. (Accepts a stringified JSON object.)`,
+              type: 'string',
+              default: '{}',
+              order: 7
+            },
+            deleteEnv: {
+              title: 'Deleted',
+              description: `Environment variables that should be deleted from a terminal environment whenever present on startup. (Separate multiple entries with commas.)`,
+              type: 'array',
+              default: ['NODE_ENV'],
+              order: 8
+            }
+          }
         }
       }
     },
@@ -310,10 +321,10 @@ export function getConfigSchema () {
         },
         additionalOptions: {
           title: 'Additional Options',
-          description: `Options to apply to XTerm terminal objects; [consult the reference](https://xtermjs.org/docs/api/terminal/interfaces/iterminaloptions/#properties).`,
-          type: 'object',
+          description: `Options to apply to XTerm terminal objects; [consult the reference](https://xtermjs.org/docs/api/terminal/interfaces/iterminaloptions/#properties). (Accepts a stringified JSON object.)`,
+          type: 'string',
           order: 2,
-          default: {}
+          default: '{}'
         }
       }
     },
@@ -345,14 +356,41 @@ export function getConfigSchema () {
           maximum: 100,
           order: 2
         },
+        useEditorFontSize: {
+          title: 'Use Editor Font Size',
+          description: 'When enabled, terminals will always use the font size specified in the Editor settings instead of the value above.',
+          order: 3,
+          type: 'boolean',
+          default: true
+        },
+        lineHeight: {
+          title: 'Line Height',
+          description: 'Multiplier to control space between lines.',
+          type: 'number',
+          default: 1.5,
+          minimum: 1,
+          maximum: 2,
+          order: 4
+        },
+        useEditorLineHeight: {
+          title: 'Use Editor Line Height',
+          description: 'When enabled, terminals will always use the line height specified in the Editor settings instead of the value above.',
+          order: 5,
+          type: 'boolean',
+          default: true
+        },
         theme: {
           title: 'Color Theme',
-          description: 'Which set of colors to use in the terminal. Can be one of the preset themes or “Custom,” which prefers the values specified in the section below.',
+          description: 'Which set of colors to use in the terminal. Can be one of the preset themes; **Stylesheet** which lets you (or a theme) specify terminal colors in a stylesheet; or **Custom**, which prefers the values specified in the section below. (Expand the **Custom Theme Colors** heading to modify them.)',
           type: 'string',
           enum: [
             {
-              value: 'Custom',
-              description: 'Custom (uses colors specified below)'
+              value: 'Stylesheet',
+              description: 'Stylesheet (uses colors defined in your syntax theme or user stylesheet)'
+            },
+            {
+              value: 'Config',
+              description: 'Config (uses colors specified below)'
             },
             'Atom Dark',
             'Atom Light',
@@ -380,13 +418,15 @@ export function getConfigSchema () {
             'Solid Colors',
             'Standard'
           ],
-          default: 'Custom',
-          order: 3
+          default: 'Stylesheet',
+          order: 6
         },
         customThemeColors: {
           title: 'Custom Theme Colors',
+          description: "Colors to use for a custom terminal theme. These will be ignored unless “Color Theme” above is set to `Config`.",
           type: 'object',
-          order: 4,
+          order: 7,
+          collapsed: true,
           properties: colorSchemaObject
         }
       }

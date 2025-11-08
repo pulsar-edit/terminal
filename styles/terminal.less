@@ -1,7 +1,5 @@
-// The ui-variables file is provided by base themes provided by Atom.
-//
-// See https://github.com/atom/atom-dark-ui/blob/master/styles/ui-variables.less
-// for a full listing of what's available.
+@import "./terminal-variables";
+
 @import "ui-variables";
 @import "octicon-mixins";
 @import "syntax-variables";
@@ -24,8 +22,99 @@ pulsar-terminal {
   // If we let this inner element be taller than `__main`, the terminal might
   // not resize properly when its pane container gets shorter.
   max-height: 100%;
+  position: relative;
+}
+
+.terminal__palette {
+  display: contents;
+  // position: absolute;
+  // top: 0;
+  // right: 0;
+}
+
+.terminal-find-palette {
+  background-color: @tool-panel-background-color;
+  position: absolute;
+  // top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px;
+  flex-direction: row;
+  z-index: 8 !important;
+
+  &[hidden] {
+    display: none;
+  }
+
+  atom-text-editor[mini] {
+    width: 200px;
+    font-size: 1em;
+  }
+
+  &__btn-close {
+    margin-left: auto;
+  }
+}
+
+:root {
+  // The Less variables are harmonious with other such variables in the Pulsar
+  // codebase, but we need to expose them as CSS custom properties to make them
+  // visible from arbitrary JavaScript.
+  //
+  // This is necessary here because the styling isn't actually done via CSS;
+  // all terminal text is drawn onto a CANVAS element. So we read these values
+  // via `getComputedStyle` and `getPropertyValue` before passing them into the
+  // XTerm options as a plain object.
+  //
+  // We also run them through Less’s `color` function so that any `hsl()` color
+  // literals are converted to hex. `hsl()` is one of the few color syntaxes
+  // that is not currently understood by XTerm.
+
+  --terminal-text-color: color(@terminal-text-color);
+  --terminal-background-color: color(@terminal-background-color);
+  --terminal-selection-background-color: color(@terminal-selection-background-color);
+  --terminal-selection-text-color: color(@terminal-selection-text-color);
+  --terminal-cursor-color: color(@terminal-cursor-color);
+
+  --terminal-result-marker-color: color(@terminal-result-marker-color);
+  --terminal-result-marker-color-selected: color(@terminal-result-marker-color-selected);
+
+  --terminal-color-black:   color(@terminal-color-black);
+  --terminal-color-red:     color(@terminal-color-red);
+  --terminal-color-green:   color(@terminal-color-green);
+  --terminal-color-yellow:  color(@terminal-color-yellow);
+  --terminal-color-blue:    color(@terminal-color-blue);
+  --terminal-color-magenta: color(@terminal-color-magenta);
+  --terminal-color-cyan:    color(@terminal-color-cyan);
+  --terminal-color-white:   color(@terminal-color-white);
+
+  --terminal-color-bright-black:   color(@terminal-color-bright-black);
+  --terminal-color-bright-red:     color(@terminal-color-bright-red);
+  --terminal-color-bright-green:   color(@terminal-color-bright-green);
+  --terminal-color-bright-yellow:  color(@terminal-color-bright-yellow);
+  --terminal-color-bright-blue:    color(@terminal-color-bright-blue);
+  --terminal-color-bright-magenta: color(@terminal-color-bright-magenta);
+  --terminal-color-bright-cyan:    color(@terminal-color-bright-cyan);
+  --terminal-color-bright-white:   color(@terminal-color-bright-white);
 }
 
 // Load the static styles here.
 /* stylelint-disable-next-line */
 @import (less) "../node_modules/@xterm/xterm/css/xterm.css";
+
+.xterm-viewport {
+  &::-webkit-scrollbar-track {
+    background: inherit;
+  }
+}
+
+.xterm {
+  padding: 5px;
+}
+
+.xterm-screen {
+  box-sizing: border-box;
+}

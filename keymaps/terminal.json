@@ -24,7 +24,14 @@
     "ctrl-~ i": "terminal:insert-selected-text"
   },
   ".platform-darwin pulsar-terminal": {
-    "cmd-alt-k": "terminal:clear"
+    "cmd-alt-k": "terminal:clear",
+    "cmd-f": "terminal:find",
+    "cmd-g": "terminal:find-next",
+    "cmd-shift-g": "terminal:find-previous"
+  },
+  ".platform-darwin .terminal-find-palette atom-text-editor": {
+    "cmd-g": "terminal:find-next",
+    "cmd-shift-g": "terminal:find-previous"
   },
   ".platform-win32 pulsar-terminal, .platform-linux pulsar-terminal": {
     "ctrl-shift-k": "terminal:clear"

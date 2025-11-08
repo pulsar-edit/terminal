@@ -3,63 +3,64 @@ import fs from 'fs-extra';
 import { CompositeDisposable, Disposable } from 'atom';
 import { TerminalModel } from './model';
 import { Config, CONFIG_DEFAULTS } from './config';
-import { ProfileData, Profiles } from './profiles';
 
-import { Terminal as XTerminal } from '@xterm/xterm';
+import { ITheme, Terminal as XTerminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { LigaturesAddon } from '@xterm/addon-ligatures';
-import { Pty } from './pty';
-import { IPty, IPtyForkOptions, IWindowsPtyForkOptions } from 'node-pty';
+import { SearchAddon } from '@xterm/addon-search';
 
-import { getCurrentCwd, isWindows } from './utils';
+import FindPalette from './find-palette';
+
+import { Pty } from './pty';
+import { IPtyForkOptions, IWindowsPtyForkOptions } from 'node-pty';
+
+import { isWindows } from './utils';
 import { getTheme } from './themes';
 
 // TODO: Pulsar complains if I import this from `@electron/remote`. But somehow
 // I can import it from `electron` without complaint, even though all it's
-// doing under the hood is proxying that call to `@electron/remote`.
+// doing under the hood is proxying that call to `@electron/remote`!
 // Investigate.
 
 // @ts-ignore
 import { remote } from 'electron';
 
-const PTY_PROCESS_OPTIONS = new Set([
-  'command',
-	'args',
-	'name',
-	'cwd',
-	'env',
-	'setEnv',
-	'deleteEnv',
-	'encoding'
-]);
-
-const TERMINAL_OPTIONS = [
-	'leaveOpenAfterExit',
-	'relaunchTerminalOnStartup',
-	'title',
-	'promptToStartup',
-];
+// Given a line height and a font size, attempts to adjust the line height so
+// that it results in a pixel height that snaps to the nearest pixel (or
+// sub-pixel, taking device pixel ratio into account).
+//
+// In theory, this would be needed for synchronization with Pulsar, since the
+// editor code does something similar. In practice, though, line height values
+// seem to be applied differently in XTerm; a shared line-height value between
+// the editor and the terminal window results in much taller lines in the
+// terminal.
+function clampLineHeight (lineHeight: number, fontSize: number) {
+  let lineHeightInPx = fontSize * lineHeight;
+  let roundedScaledLineHeightInPx = Math.round(lineHeightInPx * window.devicePixelRatio);
+  return roundedScaledLineHeightInPx / (fontSize * window.devicePixelRatio);
+}
 
 export class TerminalElement extends HTMLElement {
-  model?: TerminalModel;
-  disposables = new CompositeDisposable();
-  initializedPromise?: Promise<void>;
-  initialized: boolean = false;
+  public model?: TerminalModel;
+  public terminal?: XTerminal;
+  public pty?: Pty;
+  public initialized: boolean = false;
 
-  terminal?: XTerminal;
+  private subscriptions = new CompositeDisposable();
+  private initializedPromise?: Promise<void>;
+  private findPalette?: FindPalette;
+
+  // Object that holds the various elements.
+  private div?: Record<'top' | 'main' | 'menu' | 'terminal' | 'palette', HTMLDivElement>;
 
   #mainResizeObserver?: ResizeObserver;
   #mainContentRect?: DOMRectReadOnly;
   #terminalIntersectionObserver?: IntersectionObserver | null;
   #terminalInitiallyVisible: boolean = false;
-
-  #pendingProfileData?: Record<string, unknown>;
-
   #fitAddon?: FitAddon;
-
-  pty: Pty | null = null;
+  #searchAddon?: SearchAddon;
 
   // Metadata about the PTY.
   #ptyMeta: Partial<{
@@ -71,8 +72,6 @@ export class TerminalElement extends HTMLElement {
     options: IPtyForkOptions | IWindowsPtyForkOptions
   }> = {};
 
-  div?: Record<'top' | 'main' | 'menu' | 'terminal', HTMLDivElement>;
-
   async initialize (model: TerminalModel) {
     console.log('[Terminal] Element initialize model:', model);
     this.model = model;
@@ -82,16 +81,19 @@ export class TerminalElement extends HTMLElement {
       top: document.createElement('div'),
       main: document.createElement('div'),
       menu: document.createElement('div'),
-      terminal: document.createElement('div')
+      terminal: document.createElement('div'),
+      palette: document.createElement('div')
     };
 
     this.div.top.classList.add('terminal__top');
     this.div.main.classList.add('terminal__main');
+    this.div.palette.classList.add('terminal__palette');
     this.div.menu.classList.add('terminal__menu');
     this.div.terminal.classList.add('terminal__terminal');
     this.div.main.appendChild(this.div.terminal);
 
     this.appendChild(this.div.top);
+    this.appendChild(this.div.palette);
     this.appendChild(this.div.main);
 
     // TODO: Profile menu.
@@ -103,24 +105,17 @@ export class TerminalElement extends HTMLElement {
       initializeReject = reject;
     });
 
-
     try {
       await this.model.ready();
       this.setAttribute('session-id', this.model.getSessionId());
 
-      // TODO: Initialize profile menu model?
-
       this.#mainResizeObserver = new ResizeObserver((entries) => {
-        console.log('[Terminal] in main resize observer!');
         let last = entries[entries.length - 1];
         this.#mainContentRect = last.contentRect;
-        console.error('[Terminal] Main resize observer has contentRect of height:', last.contentRect.height);
-        console.log('Refitting terminal');
         this.refitTerminal();
       });
       this.#mainResizeObserver.observe(this.div.main);
 
-      console.log('[Terminal] Element creating IO…');
       this.#terminalIntersectionObserver = new IntersectionObserver(
         async (entries) => {
           let last = entries[entries.length - 1];
@@ -128,9 +123,7 @@ export class TerminalElement extends HTMLElement {
           if (last.intersectionRatio !== 1.0) return;
           this.#terminalInitiallyVisible = true;
           try {
-            console.warn('[Terminal] Element creating terminal!');
             await this.createTerminal();
-            this.applyPendingTerminalProfileOptions();
             initializeResolve();
           } catch (error) {
             initializeReject(error);
@@ -145,32 +138,41 @@ export class TerminalElement extends HTMLElement {
         }
       );
       this.#terminalIntersectionObserver.observe(this.div.terminal);
-      this.disposables.add(
+      this.subscriptions.add(
         new Disposable(() => this.#terminalIntersectionObserver?.disconnect())
       );
 
-      // Increase or decrease the font size when holding Ctrl and moving the
-      // mouse wheel up/down.
-      this.div.terminal.addEventListener(
-        'wheel',
-        (event) => {
-          if (!event.ctrlKey) return;
-          if (!atom.config.get('terminal.zoomFontWhenCtrlScrolling')) return;
-          event.stopPropagation();
-
-          let delta = event.deltaY < 0 ? 1 : -1;
-          let fontSize = Config.get('appearance.fontSize') + delta;
-          // let fontSize = this.model.profile.fontSize + delta;
-          if (fontSize < CONFIG_DEFAULTS.minimumFontSize) {
-            fontSize = CONFIG_DEFAULTS.minimumFontSize;
-          } else if (fontSize > CONFIG_DEFAULTS.maximumFontSize) {
-            fontSize = CONFIG_DEFAULTS.maximumFontSize;
-          }
-          Config.set('appearance.fontSize', fontSize);
-          // this.model.applyProfileChanges({ fontSize });
-        },
-        { capture: true }
+      this.subscriptions.add(
+        atom.config.onDidChange(
+          'terminal.appearance',
+          () => this.resetTheme()
+        ),
+        atom.themes.onDidChangeActiveThemes(
+          () => this.resetTheme()
+        )
       );
+
+      // Increase or decrease the font size when holding `Ctrl` and moving the
+      // mouse wheel up/down.
+      // TODO: Do we need this?
+      // this.div.terminal.addEventListener(
+      //   'wheel',
+      //   (event) => {
+      //     if (!event.ctrlKey) return;
+      //     if (!atom.config.get('behavior.zoomFontWhenCtrlScrolling')) return;
+      //     event.stopPropagation();
+      //
+      //     let delta = event.deltaY < 0 ? 1 : -1;
+      //     let fontSize = Config.get('appearance.fontSize') + delta;
+      //     if (fontSize < CONFIG_DEFAULTS.minimumFontSize) {
+      //       fontSize = CONFIG_DEFAULTS.minimumFontSize;
+      //     } else if (fontSize > CONFIG_DEFAULTS.maximumFontSize) {
+      //       fontSize = CONFIG_DEFAULTS.maximumFontSize;
+      //     }
+      //     Config.set('appearance.fontSize', fontSize);
+      //   },
+      //   { capture: true }
+      // );
     } catch (error) {
       initializeReject!(error);
       throw error;
@@ -178,25 +180,28 @@ export class TerminalElement extends HTMLElement {
     this.initialized = true;
   }
 
+  // Awaits initialization of the terminal. Resolves when a terminal is ready
+  // to accept text.
+  async ready () {
+    return await this.initializedPromise;
+  }
+
   getModel () {
     return this.model;
   }
 
   destroy () {
-    // TODO: Destroy profile menu element
     this.pty?.kill();
     this.terminal?.dispose();
-    this.disposables.dispose();
+    this.subscriptions.dispose();
   }
 
   getShellCommand () {
     return Config.get('terminal.command');
-    // return this.model.profile.command;
   }
 
   getArgs () {
     let args = Config.get('terminal.args');
-    // let args = this.model.profile.args;
     if (!Array.isArray(args)) {
       throw new Error('Arguments must be an array');
     }
@@ -204,11 +209,10 @@ export class TerminalElement extends HTMLElement {
   }
 
   getTerminalType () {
-    let terminalType = Config.get('terminal.terminalType');
-    return terminalType;
-    // return this.model.profile.name;
+    return Config.get('terminal.terminalType');
   }
 
+  // Ensures the given path exists and points to a valid directory on disk.
   async pathIsDirectory (filePath: string | undefined | null) {
     if (!filePath) return false;
     try {
@@ -220,16 +224,16 @@ export class TerminalElement extends HTMLElement {
     return false;
   }
 
+  // Determines the proper `cwd` for this shell.
   async getCwd () {
     if (!this.model) return;
     let cwd = this.model.cwd;
-    // let cwd = getCurrentCwd();
-    // let cwd = this.model.profile.cwd;
+
     if (await this.pathIsDirectory(cwd)) {
       return cwd;
     }
 
-    cwd = this.model?.getPath();
+    cwd = this.model.getPath();
     if (await this.pathIsDirectory(cwd)) {
       return cwd;
     }
@@ -245,9 +249,9 @@ export class TerminalElement extends HTMLElement {
   getEnv () {
     let env: Record<string, string> = {};
 
-    let fallbackEnv = Config.get('terminal.fallbackEnv') ?? {};
-    let overrideEnv = Config.get('terminal.overrideEnv') ?? {};
-    let deleteEnv = Config.get('terminal.deleteEnv') ?? [];
+    let fallbackEnv = Config.get('terminal.env.fallbackEnv') ?? {};
+    let overrideEnv = Config.get('terminal.env.overrideEnv') ?? {};
+    let deleteEnv = Config.get('terminal.env.deleteEnv') ?? [];
 
     // First copy over the fallbacks…
     Object.assign(env, fallbackEnv);
@@ -269,7 +273,6 @@ export class TerminalElement extends HTMLElement {
 
   leaveOpenAfterExit () {
     return Config.get('behavior.leaveOpenAfterExit');
-    // return this.model.profile.leaveOpenAfterExit;
   }
 
   shouldPromptToStartup () {
@@ -278,9 +281,6 @@ export class TerminalElement extends HTMLElement {
     // TODO: Still don't prompt for user-initiated actions. Requires that we
     // distinguish cases when a service spawns a terminal.
     return true;
-
-    // return Config.get('behavior.promptOnStartup') ?? false;
-    // return this.model.profile.promptToStartup;
   }
 
   isPtyProcessRunning () {
@@ -293,22 +293,28 @@ export class TerminalElement extends HTMLElement {
       cursorBlink: true,
       ...extraXtermOptions
     };
-    xtermOptions.fontSize = Config.get('appearance.fontSize');
     let fontFamilyKey = Config.get('appearance.useEditorFontFamily') ?
-      'editor.fontFamily' : 'appearance.fontFamily';
+      'editor.fontFamily' : 'terminal.appearance.fontFamily';
+    let fontSizeKey = Config.get('appearance.useEditorFontSize') ?
+      'editor.fontSize' : 'terminal.appearance.fontSize';
+    let lineHeightKey = Config.get('appearance.useEditorLineHeight') ?
+      'editor.lineHeight' : 'terminal.appearance.lineHeight';
+
     xtermOptions.fontFamily = atom.config.get(fontFamilyKey);
+    xtermOptions.fontSize = atom.config.get(fontSizeKey);
+    let originalLineHeight = atom.config.get(lineHeightKey);
+    let adjustedLineHeight = clampLineHeight(originalLineHeight, xtermOptions.fontSize);
+    xtermOptions.lineHeight = adjustedLineHeight;
     xtermOptions.theme = getTheme();
 
     return structuredClone(xtermOptions);
   }
 
-  setMainBackgroundColor () {
-    let theme = getTheme();
+  setMainBackgroundColor (theme: ITheme = getTheme()) {
     this.style.backgroundColor = theme?.background ?? '#000000';
   }
 
   async createTerminal () {
-    console.log('[Terminal] Element createTerminal!');
     this.setMainBackgroundColor();
 
     this.terminal = new XTerminal({
@@ -335,24 +341,26 @@ export class TerminalElement extends HTMLElement {
 
     this.terminal.loadAddon(new LigaturesAddon());
 
+    this.#searchAddon = new SearchAddon();
+    this.terminal.loadAddon(this.#searchAddon);
+
+    this.findPalette = new FindPalette(this.#searchAddon);
+
+    if (this.div) {
+      this.div.palette.appendChild(this.findPalette.element);
+    }
+
     this.#ptyMeta.cols = 80;
     this.#ptyMeta.rows = 25;
 
-    console.log('[Terminal] Created and refitting?', this.#terminalInitiallyVisible);
     this.refitTerminal();
 
-    // TEMP
-    setTimeout(() => {
-      console.warn('[Terminal] After one second, cols/rows are:', this.pty?.cols, this.pty?.rows);
-      this.refitTerminal()
-    }, 1000);
-
-    this.pty = null;
+    this.pty = undefined;
     this.#ptyMeta.running = false;
 
     console.log('[Terminal] Adding data');
-    this.disposables.add(
-      // Send input to the PTY.
+    this.subscriptions.add(
+      // When the terminal receives input, send it to the PTY.
       this.terminal.onData((data) => {
         if (this.isPtyProcessRunning()) {
           this.pty!.write(data);
@@ -360,7 +368,7 @@ export class TerminalElement extends HTMLElement {
       })
     );
 
-    this.disposables.add(
+    this.subscriptions.add(
       this.terminal.onSelectionChange(() => {
         if (!this.terminal) return;
         if (!Config.get('behavior.copyOnSelect')) return;
@@ -400,6 +408,43 @@ export class TerminalElement extends HTMLElement {
     } else {
       await this.restartPtyProcess();
     }
+  }
+
+  resetTheme () {
+    if (!this.terminal) return;
+    let theme = getTheme();
+    this.setMainBackgroundColor(theme);
+    this.terminal.options.theme = { ...theme };
+  }
+
+  showFind () {
+    if (!this.findPalette) return false;
+    this.findPalette.show();
+    return true;
+  }
+
+  toggleFind () {
+    if (!this.findPalette) return false;
+    this.findPalette.toggle();
+    return true;
+  }
+
+  hideFind () {
+    if (!this.findPalette) return false;
+    this.findPalette.hide();
+    return true;
+  }
+
+  findNext () {
+    if (!this.findPalette) return false;
+    this.findPalette.findNext();
+    return true;
+  }
+
+  findPrevious () {
+    if (!this.findPalette) return false;
+    this.findPalette.findPrevious();
+    return true;
   }
 
   showNotification (
@@ -490,7 +535,7 @@ export class TerminalElement extends HTMLElement {
     this.#ptyMeta.options.cols = this.pty?.cols;
     this.#ptyMeta.options.rows = this.pty?.rows;
 
-    this.pty = null;
+    this.pty = undefined;
     this.#ptyMeta.running = false;
 
     try {
@@ -518,8 +563,11 @@ export class TerminalElement extends HTMLElement {
           this.terminal.write(data);
           this.model.handleNewData();
         });
+
+        // Handle the PTY exiting on its own, like if the user runs `exit` or
+        // `logout`.
         this.pty.onExit((_exitCode) => {
-          if (!this.terminal || !this.model || !this.#ptyMeta) {
+          if (!this.terminal || !this.model) {
             throw new Error('No terminal or model for incoming PTY data');
           }
           this.#ptyMeta.running = false;
@@ -529,31 +577,10 @@ export class TerminalElement extends HTMLElement {
             // TODO: Show a notification whether successful exit or not? Feels weird.
           }
         });
-        console.error('[Terminal] WHAT ABOUT NOW')
         await this.pty.ready();
         this.refitTerminal();
-        // this.pty.process.on('data', (data) => {
-        //   let oldTitle = ''
-        //   if (this.model.profile.title !== null) {
-        //     this.model.title = this.model.profile.title;
-				// 	} else if (process.platform !== 'win32') {
-        //     this.model.title = this.pty.title;
-				// 	}
-				// 	if (oldTitle !== this.model.title) {
-				// 		this.model.emitter.emit('did-change-title', this.model.title)
-				// 	}
-        //   this.terminal!.write(data)
-        //   this.model.handleNewData();
-        // });
+        this.focusTerminal();
 
-        // this.pty.process.on('exit', (code, signal) => {
-        //   this._pty.running = false;
-        //   if (!this.shouldLeaveOpenAfterExit()) {
-        //     this.model.exit();
-        //   } else {
-        //     // TODO: Show a notification whether successful exit or not? Feels weird.
-        //   }
-        // });
         if (this.div) {
           this.div.top.innerHTML = ''; // TODO
         }
@@ -571,53 +598,32 @@ export class TerminalElement extends HTMLElement {
     this.terminal?.clear();
   }
 
-  applyPendingTerminalProfileOptions () {
-    if (!this.#pendingProfileData) return;
-
-    // For any changes involving the xterm.js Terminal object, only apply them
-		// when the terminal is visible.
-    if (this.#terminalInitiallyVisible) {
-      // TODO
-    }
-
-    for (let key of TERMINAL_OPTIONS) {
-      delete this.#pendingProfileData[key];
-    }
-  }
-
   refitTerminal () {
-    console.log('[Terminal] Refitting at', performance.now());
+    // console.log('[Terminal] Refitting at', performance.now());
     if (!this.#terminalInitiallyVisible) {
-      console.log('[Terminal] Skipped refit because terminal not visible yet');
+      // console.log('[Terminal] Skipped refit because terminal not visible yet');
       return;
     }
     if (!this.#mainContentRect) {
-      console.log('[Terminal] Skipped > because terminal not visible yet (no contentRect)');
+      // console.log('[Terminal] Skipped > because terminal not visible yet (no contentRect)');
       return;
     }
     if (this.#mainContentRect.height === 0 || this.#mainContentRect.width === 0) {
-      console.log('[Terminal] Skipped refit because terminal not visible yet (contentRect is 0 on one or both dimensions)');
+      // console.log('[Terminal] Skipped refit because terminal not visible yet (contentRect is 0 on one or both dimensions)');
       return;
     }
 
     this.#fitAddon!.fit();
     let geometry = this.#fitAddon!.proposeDimensions();
     if (!geometry || !this.isPtyProcessRunning()) {
-      if (!geometry) {
-        console.log('[Terminal] Got no geometry from the refit algorithm!')
-      }
-      if (!this.isPtyProcessRunning()) {
-        console.log('[Terminal] PTY is not running yet, so there’s no point!');
-      }
       return
     }
-    console.log('[Terminal] Refit has proposed dimensions of… cols:', geometry.cols, 'rows:', geometry.rows);
     if (!this.#ptyMeta || !this.pty) {
       throw new Error('Impossible!')
     }
     if (this.#ptyMeta.cols !== geometry.cols || this.#ptyMeta.rows !== geometry.rows) {
-      console.log('[Terminal] Existing dimensions are, by contrast,', this.#ptyMeta.cols, 'and', this.#ptyMeta.rows);
-      console.warn('RESIZING TO', geometry.cols, geometry.rows);
+      // console.log('[Terminal] Existing dimensions are, by contrast,', this.#ptyMeta.cols, 'and', this.#ptyMeta.rows);
+      // console.warn('RESIZING TO', geometry.cols, geometry.rows);
       this.pty.resize(geometry.cols, geometry.rows);
       this.#ptyMeta.cols = geometry.cols;
       this.#ptyMeta.rows = geometry.rows;
@@ -634,11 +640,6 @@ export class TerminalElement extends HTMLElement {
     }
   }
 
-  async toggleProfileMenu () {
-    // The profile menu needs to be initialized before it can be toggled.
-    // TODO
-  }
-
   hide () {
     if (!this.div) return;
     this.div.terminal.style.visibility = 'hidden';
@@ -647,14 +648,6 @@ export class TerminalElement extends HTMLElement {
   show () {
     if (!this.div) return;
     this.div.terminal.style.visibility = 'visible';
-  }
-
-  scheduleProfileChanges (profileChanges: ProfileData) {
-    this.#pendingProfileData = {
-      ...this.#pendingProfileData ?? {},
-			...profileChanges,
-    };
-    this.applyPendingTerminalProfileOptions();
   }
 }
 
