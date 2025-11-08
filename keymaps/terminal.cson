@@ -1,0 +1,80 @@
+
+".platform-darwin atom-workspace":
+  # Activate the last active terminal, creating a new one if needed.
+  "cmd-alt-`": "terminal:focus"
+  # Explicitly create a new terminal in the default location.
+  "cmd-alt-~ n": "terminal:open"
+  # Explicitly create a new terminal in a specific destination.
+  "cmd-alt-~ up": "terminal:open-split-up"
+  "cmd-alt-~ down": "terminal:open-split-down"
+  "cmd-alt-~ left": "terminal:open-split-left"
+  "cmd-alt-~ right": "terminal:open-split-right"
+  "cmd-alt-~ b": "terminal:open-split-bottom-dock"
+  "cmd-alt-~ l": "terminal:open-split-left-dock"
+  "cmd-alt-~ r": "terminal:open-split-right-dock"
+  # Run the selected text in the active terminal.
+  "cmd-alt-~ x": "terminal:run-selected-text"
+  # Insert the selected text into the active terminal.
+  "cmd-alt-~ i": "terminal:insert-selected-text"
+
+".platform-darwin pulsar-terminal":
+  # Cmd-K clears the buffer in Terminal.app and iTerm. That's taken in the
+  # default keymap for workspace-related tasks, so we can't supersede it.
+  # Instead we'll use something close to it.
+  "cmd-alt-k": "terminal:clear"
+  # We can also support the common Ctrl-L shortcut for the same thing.
+  "ctrl-l": "terminal:clear"
+  # These purposefully shadow the default shortcuts from the `find-and-replace`
+  # package. We can't easily repurpose `find-and-replace` to search an `xterm`
+  # buffer instead of a text editor, so we'll interpose ourselves and offer
+  # substitute "find" behavior.
+  "cmd-f": "terminal:find"
+  "cmd-g": "terminal:find-next"
+  "cmd-shift-g": "terminal:find-previous"
+  "cmd-e": "terminal:set-selection-as-find-pattern"
+
+".platform-darwin .terminal-find-palette atom-text-editor":
+  # Ensure these shortcuts work equally well whether the terminal or the "find"
+  # search field is focused.
+  "cmd-f": "terminal:find"
+  "cmd-g": "terminal:find-next"
+  "cmd-shift-g": "terminal:find-previous"
+
+".platform-win32 atom-workspace, .platform-linux .atom-workspace":
+  # Activate the last active terminal, creating a new one if needed.
+  "ctrl-`": "terminal:focus"
+  # Explicitly create a new terminal in the default location.
+  "ctrl-~ n": "terminal:open"
+  # Explicitly create a new terminal in a specific destination.
+  "ctrl-~ up": "terminal:open-split-up"
+  "ctrl-~ down": "terminal:open-split-down"
+  "ctrl-~ left": "terminal:open-split-left"
+  "ctrl-~ right": "terminal:open-split-right"
+  "ctrl-~ b": "terminal:open-split-bottom-dock"
+  "ctrl-~ l": "terminal:open-split-left-dock"
+  "ctrl-~ r": "terminal:open-split-right-dock"
+  # Run the selected text in the active terminal.
+  "ctrl-~ x": "terminal:run-selected-text"
+  # Insert the selected text into the active terminal.
+  "ctrl-~ i": "terminal:insert-selected-text"
+
+".platform-win32 pulsar-terminal, .platform-linux pulsar-terminal":
+  # Ctrl-L is a standard way of clearing the terminal buffer in a Unix shell.
+  # In Pulsar, it's used to select the entire line in an editor… but we're not
+  # in an editor, so we can also use it for clearing the buffer!
+  "ctrl-l": "terminal:clear"
+  # These purposefully shadow the default shortcuts from the `find-and-replace`
+  # package. We can't easily repurpose `find-and-replace` to search an `xterm`
+  # buffer instead of a text editor, so we'll interpose ourselves and offer
+  # substitute "find" behavior.
+  "ctrl-f": "terminal:find"
+  "f3": "terminal:find-next"
+  "shift-f3": "terminal:find-previous"
+  "ctrl-e": "terminal:use-selection-as-find-pattern"
+
+".platform-win32 .terminal-find-palette atom-text-editor, .platform-linux .terminal-find-palette atom-text-editor":
+  # Ensure these shortcuts work equally well whether the terminal or the "find"
+  # search field is focused.
+  "ctrl-f": "terminal:find"
+  "f3": "terminal:find-next"
+  "shift-f3": "terminal:find-previous"
