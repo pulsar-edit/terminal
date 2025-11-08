@@ -13,6 +13,7 @@ export function isLinux () {
   return process.platform === 'linux';
 }
 
+export const BASE_URI = `terminal://`;
 
 export function withResolvers<T extends unknown = void>(): {
   promise: Promise<T>,
@@ -29,7 +30,6 @@ export function withResolvers<T extends unknown = void>(): {
 
   return { promise, resolve: resolve!, reject: reject! };
 }
-
 
 export function recalculateActive (terminals: Set<TerminalModel>, active?: TerminalModel) {
   let terminalsList = Array.from(terminals);
@@ -75,4 +75,12 @@ export function debounce(
     clearTimeout(timeoutId)
     timeoutId = setTimeout(() => callback(...args), waitMs);
   }
+}
+
+export function generateUri (params: Record<string, string> = {}) {
+  let url = new URL(`${BASE_URI}${crypto.randomUUID()}/`);
+  for (let [key, value] of Object.entries(params)) {
+    url.searchParams.set(key, value);
+  }
+  return url.toString();
 }

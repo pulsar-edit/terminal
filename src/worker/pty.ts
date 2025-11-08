@@ -19,6 +19,7 @@ import { IPty, IPtyForkOptions, IWindowsPtyForkOptions, spawn } from 'node-pty';
 import ndjson from 'ndjson';
 import type { PtyMessage } from '../pty';
 
+// Whether log messages get sent to the parent.
 const DEBUG = false;
 
 async function spawnPty (
@@ -31,7 +32,6 @@ async function spawnPty (
   pty.onExit(({ exitCode, signal }) => emitExit(exitCode, signal));
 
   currentPty = pty;
-
   return pty;
 }
 

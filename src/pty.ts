@@ -130,7 +130,6 @@ export class Pty {
 
     this.error = false;
     this.process = spawn(process.execPath, args, options);
-    console.log('[Terminal] Process is', process.execPath, 'args are', args, 'pid is', process.pid);
 
     let {
       promise: readyPromise,
@@ -141,7 +140,6 @@ export class Pty {
     this.process.stdout!
       .pipe(ndjson.parse({ strict: false }))
       .on('data', (obj: PtyMessage) => {
-        console.log('[Terminal] Received message of type', obj.type);
         switch (obj.type) {
           case 'ready':
             readyResolve();
@@ -150,7 +148,6 @@ export class Pty {
             if (obj.meta) {
               Object.assign(this.meta, obj.meta);
             }
-            console.log('[Terminal] Data is:', obj.payload);
             this.emitter.emit('data', obj.payload);
             break;
           case 'exit':

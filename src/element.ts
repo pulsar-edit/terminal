@@ -73,7 +73,6 @@ export class TerminalElement extends HTMLElement {
   }> = {};
 
   async initialize (model: TerminalModel) {
-    console.log('[Terminal] Element initialize model:', model);
     this.model = model;
     this.model.setElement(this);
 
@@ -372,7 +371,6 @@ export class TerminalElement extends HTMLElement {
     this.pty = undefined;
     this.#ptyMeta.running = false;
 
-    console.log('[Terminal] Adding data');
     this.subscriptions.add(
       // When the terminal receives input, send it to the PTY.
       this.terminal.onData((data) => {
@@ -411,9 +409,12 @@ export class TerminalElement extends HTMLElement {
     this.terminal.options.theme = { ...theme };
   }
 
-  showFind () {
+  showFind (prefilledText?: string) {
     if (!this.findPalette) return false;
     this.findPalette.show();
+    if (prefilledText) {
+      this.findPalette.search(prefilledText);
+    }
     return true;
   }
 
@@ -533,11 +534,6 @@ export class TerminalElement extends HTMLElement {
     this.#ptyMeta.running = false;
 
     try {
-      console.log('[Terminal] Declaring new PTY with args:', {
-        file: this.#ptyMeta.command ?? '',
-        args: this.#ptyMeta.args,
-        options: this.#ptyMeta.options
-      });
       this.pty = new Pty({
         file: this.#ptyMeta.command ?? '',
         args: this.#ptyMeta.args,
@@ -593,27 +589,15 @@ export class TerminalElement extends HTMLElement {
   }
 
   refitTerminal () {
-    // console.log('[Terminal] Refitting at', performance.now());
-    if (!this.#terminalInitiallyVisible) {
-      // console.log('[Terminal] Skipped refit because terminal not visible yet');
-      return;
-    }
-    if (!this.#mainContentRect) {
-      // console.log('[Terminal] Skipped > because terminal not visible yet (no contentRect)');
-      return;
-    }
+    if (!this.#terminalInitiallyVisible) return;
+    if (!this.#mainContentRect) return;
     if (this.#mainContentRect.height === 0 || this.#mainContentRect.width === 0) {
-      // console.log('[Terminal] Skipped refit because terminal not visible yet (contentRect is 0 on one or both dimensions)');
       return;
     }
-
     this.#fitAddon!.fit();
     let geometry = this.#fitAddon!.proposeDimensions();
-    if (!geometry || !this.isPtyProcessRunning()) {
+    if (!geometry || !this.isPtyProcessRunning() || !this.pty) {
       return
-    }
-    if (!this.#ptyMeta || !this.pty) {
-      throw new Error('Impossible!')
     }
     if (this.#ptyMeta.cols !== geometry.cols || this.#ptyMeta.rows !== geometry.rows) {
       // console.log('[Terminal] Existing dimensions are, by contrast,', this.#ptyMeta.cols, 'and', this.#ptyMeta.rows);

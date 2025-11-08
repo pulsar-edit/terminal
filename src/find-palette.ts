@@ -31,12 +31,18 @@ export default class FindPalette {
   getDecorationsOptions () {
     let root = getComputedStyle(document.documentElement);
     let options: ISearchDecorationOptions = {
-      matchOverviewRuler: `#000000`,
-      activeMatchColorOverviewRuler: `#000000`,
-      matchBorder: root.getPropertyValue('--terminal-syntax-result-marker-color'),
-      activeMatchBorder: root.getPropertyValue('--terminal-syntax-result-marker-color-selected'),
-      matchBackground: 'rgba(0, 0, 0, 0)',
-      activeMatchBackground: root.getPropertyValue('--terminal-selected-text-background-color')
+      // TODO: These are required in the decorations object (typedef bug?) but
+      // we aren't using them, so we're specifying transparent color values.
+      matchOverviewRuler: `#00000000`,
+      activeMatchColorOverviewRuler: `#00000000`,
+
+      // TODO: These get specified by the stylesheet. There's not currently an
+      // analog to this approach if a user chooses to define colors via the
+      // config system; that should be fixed.
+      matchBorder: root.getPropertyValue('--terminal-result-marker-color'),
+      activeMatchBorder: root.getPropertyValue('--terminal-result-marker-color-selected'),
+      matchBackground: root.getPropertyValue('--terminal-background-color'),
+      activeMatchBackground: root.getPropertyValue('--terminal-selection-background-color')
     }
     return options;
   }
@@ -46,7 +52,6 @@ export default class FindPalette {
     etch.initialize(this);
 
     this.searchAddon.onDidChangeResults((event) => {
-      console.warn('[FindPalette] Search addon sent results:', event);
       this.update({
         resultIndex: event.resultIndex,
         resultCount: event.resultCount
@@ -55,11 +60,12 @@ export default class FindPalette {
   }
 
   search (term: string) {
-    console.log('[FindPalette] Starting search for:', term);
-    // TODO: Search decorations.
     this.searchAddon.findNext(term, { decorations: this.getDecorationsOptions() });
+    let text = this.refs.search.getText();
+    if (text !== term) {
+      this.refs.search.setText(term);
+    }
     this.term = term;
-    console.log('[FindPalette] WTF?', this.searchAddon);
   }
 
   async show () {
@@ -82,26 +88,15 @@ export default class FindPalette {
   }
 
   findNext () {
-    console.log('[FindPalette] Find next:', this.term, this.resultCount, this.resultIndex);
     if (this.resultCount === 0) return false;
     if (!this.term) return false;
     this.searchAddon.findNext(this.term, { decorations: this.getDecorationsOptions() });
-    // let resultIndex = this.resultIndex + 1;
-    // if (resultIndex >= this.resultCount) {
-    //   resultIndex = 0;
-    // }
-    // this.update({ resultIndex });
   }
 
   findPrevious () {
     if (this.resultCount === 0) return false;
     if (!this.term) return false;
     this.searchAddon.findPrevious(this.term, { decorations: this.getDecorationsOptions() });
-    // let resultIndex = this.resultIndex - 1;
-    // if (resultIndex < 0) {
-    //   resultIndex = this.resultCount - 1;
-    // }
-    // this.update({ resultIndex });
   }
 
   async update ({ term, visible, resultCount, resultIndex }: Partial<FindPaletteProperties>) {

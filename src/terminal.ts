@@ -3,14 +3,12 @@ import { CommandEvent, CompositeDisposable, Pane, TextEditorElement, WorkspaceOp
 import { Config, getConfigSchema } from './config';
 import { TerminalElement } from './element';
 import { TerminalModel } from './model';
-import { debounce, recalculateActive } from './utils';
+import { BASE_URI, debounce, recalculateActive, generateUri } from './utils';
 import crypto from 'crypto';
 
 type OpenOptions = WorkspaceOpenOptions & {
-  target?: HTMLElement
+  target?: HTMLElement | EventTarget | null
 };
-
-export const BASE_URI = `terminal://`;
 
 export default class Terminal {
 
@@ -94,16 +92,15 @@ export default class Terminal {
         'terminal:open-split-right': () => {
           this.open(this.generateUri(), { split: 'right' });
         },
-        'terminal:open-split-bottom-dock': () => {
+        'terminal:open-bottom-dock': () => {
           this.openInCenterOrDock(atom.workspace.getBottomDock());
         },
-        'terminal:open-split-left-dock': () => {
+        'terminal:open-left-dock': () => {
           this.openInCenterOrDock(atom.workspace.getLeftDock());
         },
-        'terminal:open-split-right-dock': () => {
+        'terminal:open-right-dock': () => {
           this.openInCenterOrDock(atom.workspace.getRightDock());
         },
-        // TODO: Reorganize?
         'terminal:close-all': () => {
           this.exitAllTerminals();
         },
@@ -115,66 +112,129 @@ export default class Terminal {
         },
         'terminal:focus-next': () => this.focusNext(),
         'terminal:focus-previous': () => this.focusPrevious()
+      }),
+      atom.commands.add('pulsar-terminal', {
+        'core:copy': (event) => {
+          let element = this.inferTerminalElement(event);
+          if (!element) return;
+          atom.clipboard.write(element.terminal?.getSelection() ?? '');
+        },
+        'core:paste': (event) => {
+          let element = this.inferTerminalElement(event);
+          if (!element) return;
+          let textToPaste = atom.clipboard.read();
+          element.getModel()?.paste(textToPaste);
+        },
+        'terminal:set-selection-as-find-pattern': (event) => {
+          let element = this.inferTerminalElement(event);
+          if (!element || !element.terminal) return;
+          let selection = element.terminal.getSelection();
+
+          let didShow = element.showFind(selection);
+          if (!didShow) event.abortKeyBinding();
+        },
+        'terminal:restart': (event) => {
+          let element = this.inferTerminalElement(event);
+          if (!element) return;
+          element.restartPtyProcess();
+        },
+        'terminal:unfocus': () => {
+          atom.views.getView(atom.workspace).focus();
+        },
+        'terminal:clear': (event) => {
+          let element = this.inferTerminalElement(event);
+          if (!element) return;
+          element.clear();
+        },
+        'terminal:find': (event) => {
+          let element = this.inferTerminalElement(event);
+          if (!element) return;
+
+          let didShow = element.showFind();
+          if (!didShow) event.abortKeyBinding();
+        },
+        'terminal:find-next': (event) => {
+          let element = this.inferTerminalElement(event);
+          if (!element) return;
+
+          let didRespond = element.findNext();
+          if (!didRespond) event.abortKeyBinding();
+        },
+        'terminal:find-previous': (event) => {
+          let element = this.inferTerminalElement(event);
+          if (!element) return;
+
+          let didRespond = element.findPrevious();
+          if (!didRespond) event.abortKeyBinding();
+        }
+      }),
+
+      atom.commands.add('.terminal-find-palette atom-text-editor', {
+        'core:cancel': (event) => {
+          let element = this.inferTerminalElement(event);
+          if (!element) return;
+
+          let didHide = element.hideFind();
+          if (!didHide) event.abortKeyBinding();
+        }
+      }),
+
+      atom.commands.add("atom-text-editor, .tree-view, .tab-bar", {
+        "terminal:open-context-menu": {
+          hiddenInCommandPalette: true,
+          didDispatch: ({ target }) => {
+            this.open(this.generateUri(), this.addDefaultPosition({ target }));
+          }
+        },
+        "terminal:open-center-context-menu": {
+          hiddenInCommandPalette: true,
+          didDispatch: ({ target }) => {
+            this.openInCenterOrDock(atom.workspace, { target });
+          }
+        },
+        "terminal:open-split-up-context-menu": {
+          hiddenInCommandPalette: true,
+          didDispatch: ({ target }) => {
+            this.open(this.generateUri(), { split: "up", target });
+          }
+        },
+        "terminal:open-split-down-context-menu": {
+          hiddenInCommandPalette: true,
+          didDispatch: ({ target }) => {
+            this.open(this.generateUri(), { split: "down", target });
+          }
+        },
+        "terminal:open-split-left-context-menu": {
+          hiddenInCommandPalette: true,
+          didDispatch: ({ target }) => {
+            this.open(this.generateUri(), { split: "left", target });
+          }
+        },
+        "terminal:open-split-right-context-menu": {
+          hiddenInCommandPalette: true,
+          didDispatch: ({ target }) => {
+            this.open(this.generateUri(), { split: "right", target });
+          }
+        },
+        "terminal:open-split-bottom-dock-context-menu": {
+          hiddenInCommandPalette: true,
+          didDispatch: ({ target }) => {
+            this.openInCenterOrDock(atom.workspace.getBottomDock(), { target });
+          }
+        },
+        "terminal:open-split-left-dock-context-menu": {
+          hiddenInCommandPalette: true,
+          didDispatch: ({ target }) => {
+            this.openInCenterOrDock(atom.workspace.getLeftDock(), { target });
+          }
+        },
+        "terminal:open-split-right-dock-context-menu": {
+          hiddenInCommandPalette: true,
+          didDispatch: ({ target }) => { this.openInCenterOrDock(atom.workspace.getRightDock(), { target });
+          }
+        },
       })
     );
-
-    atom.commands.add('pulsar-terminal', {
-      'core:copy': (event) => {
-        let element = this.inferTerminalElement(event);
-        if (!element) return;
-        atom.clipboard.write(element.terminal?.getSelection() ?? '');
-      },
-      'core:paste': (event) => {
-        let element = this.inferTerminalElement(event);
-        if (!element) return;
-        let textToPaste = atom.clipboard.read();
-        element.getModel()?.paste(textToPaste);
-      },
-      'terminal:restart': (event) => {
-        let element = this.inferTerminalElement(event);
-        if (!element) return;
-        element.restartPtyProcess();
-      },
-      'terminal:unfocus': () => {
-        atom.views.getView(atom.workspace).focus();
-      },
-      'terminal:clear': (event) => {
-        let element = this.inferTerminalElement(event);
-        if (!element) return;
-        element.clear();
-      },
-      'terminal:find': (event) => {
-        let element = this.inferTerminalElement(event);
-        if (!element) return;
-
-        let didShow = element.showFind();
-        if (!didShow) event.abortKeyBinding();
-      },
-      'terminal:find-next': (event) => {
-        let element = this.inferTerminalElement(event);
-        if (!element) return;
-
-        let didRespond = element.findNext();
-        if (!didRespond) event.abortKeyBinding();
-      },
-      'terminal:find-previous': (event) => {
-        let element = this.inferTerminalElement(event);
-        if (!element) return;
-
-        let didRespond = element.findPrevious();
-        if (!didRespond) event.abortKeyBinding();
-      }
-    });
-
-    atom.commands.add('.terminal-find-palette atom-text-editor', {
-      'core:cancel': (event) => {
-        let element = this.inferTerminalElement(event);
-        if (!element) return;
-
-        let didHide = element.hideFind();
-        if (!didHide) event.abortKeyBinding();
-      }
-    });
 
     let debouncedUpdateTheme = debounce(() => this.updateTheme());
 
@@ -473,7 +533,7 @@ export default class Terminal {
   }
 
   static generateUri() {
-    return `${BASE_URI}${crypto.randomUUID()}/`;
+    return generateUri();
   }
 
   // SERVICES

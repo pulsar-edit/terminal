@@ -5,7 +5,7 @@ import path from 'path';
 // import os from 'os';
 
 import fs from 'fs-extra';
-import { getCurrentCwd, recalculateActive } from "./utils";
+import { generateUri, getCurrentCwd, recalculateActive } from "./utils";
 import { Config } from "./config";
 
 export type TerminalModelOptions = {
@@ -24,8 +24,8 @@ export class TerminalModel {
   }
 
   options: TerminalModelOptions;
-  uri: string;
   public cwd: string | undefined = undefined;
+  private url: URL;
   terminals: TerminalModelOptions['terminals'];
   sessionId: string;
   initializedPromise: Promise<void>;
@@ -47,20 +47,24 @@ export class TerminalModel {
 
   constructor (options: TerminalModelOptions) {
     this.options = options;
-    this.uri = this.options.uri;
-    let url = new URL(this.uri);
-    this.sessionId = url.host;
+    let uri = this.options.uri;
+    this.url = new URL(uri);
+    this.sessionId = this.url.host;
     this.terminals = this.options.terminals;
     this.activeIndex = this.terminals.size;
     this.title = DEFAULT_TITLE;
 
-    this.cwd = url.searchParams.get('cwd') ?? undefined;
+    this.cwd = this.url.searchParams.get('cwd') ?? undefined;
 
     this.terminals.add(this);
 
     this.initializedPromise = this.initialize().then(() => {
       this.initialized = true;
     })
+  }
+
+  get uri () {
+    return this.url.toString();
   }
 
   async initialize () {
@@ -120,6 +124,18 @@ export class TerminalModel {
     }
 
     this.cwd = cwd ?? undefined;
+    if (cwd) {
+      // TODO: Ideally, we'd be able to keep `cwd` up to date even when it's
+      // changed via `cd` and other commands. VS Code can only do this by
+      // integrating into the shell; the approach is different for bash vs zsh
+      // vs fish vs PowerShell.
+      //
+      // So for now, we'll store the original `cwd` we decided on upon
+      // creation, and that'll have to do. This is what will be used as the
+      // initial `cwd` if the user duplicates this pane item — as would happen
+      // if a pane were split.
+      this.url.searchParams.set('cwd', cwd);
+    }
   }
 
   serialize () {
@@ -247,9 +263,6 @@ export class TerminalModel {
 
   getSessionParameters () {
     return '';
-    // let url = Profiles.generateUriFromProfileData(this.getProfile());
-    // url.searchParams.sort();
-    // return url.searchParams.toString();
   }
 
   refitTerminal () {
@@ -273,8 +286,24 @@ export class TerminalModel {
     this.element?.restartPtyProcess();
   }
 
-  // This can't be called `copy` because a method called `copy`, if present,
-  // will be assumed to be how a pane item duplicates itself.
+  getParams() {
+    let result: Record<string, string> = {};
+    let params = this.url.searchParams;
+    for (let [key, value] of params.entries()) {
+      result[key] = value;
+    }
+    return result;
+  }
+
+  // Make a new copy of this terminal. This is used whenever we split the
+  // current pane item into a new container.
+  copy () {
+    return new TerminalModel({
+      uri: generateUri(this.getParams()),
+      terminals: this.terminals
+    });
+  }
+
   copyFromTerminal () {
     return this.element?.terminal?.getSelection();
   }
