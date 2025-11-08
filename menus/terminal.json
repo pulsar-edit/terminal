@@ -1,0 +1,149 @@
+{
+  "context-menu": {
+    "pulsar-terminal": [
+      {
+        "label": "Close",
+        "command": "terminal:close"
+      },
+      {
+        "label": "Restart",
+        "command": "terminal:restart"
+      },
+      {
+        "label": "Clear",
+        "command": "terminal:clear"
+      },
+      { "type": "separator" },
+      {
+        "label": "Copy",
+        "command": "terminal:copy"
+      },
+      {
+        "label": "Paste",
+        "command": "terminal:paste"
+      },
+      { "type": "separator" },
+      {
+        "label": "Close All Terminals",
+        "command": "terminal:close-all"
+      }
+    ],
+    "atom-text-editor, .tree-view, .tab-bar": [
+      {
+        "label": "Terminal",
+        "submenu": [
+          {
+            "label": "Focus",
+            "command": "terminal:focus"
+          },
+          {
+            "label": "Open New",
+            "command": "terminal:open-context-menu"
+          },
+          {
+            "label": "Open New In…",
+            "submenu": [
+              {
+                "label": "Center",
+                "command": "terminal:open-center-context-menu"
+              },
+              {
+                "label": "Split Up",
+                "command": "terminal:open-up-context-menu"
+              },
+              {
+                "label": "Split Down",
+                "command": "terminal:open-down-context-menu"
+              },
+              {
+                "label": "Split Left",
+                "command": "terminal:open-left-context-menu"
+              },
+              {
+                "label": "Split Right",
+                "command": "terminal:open-right-context-menu"
+              },
+              {
+                "label": "Bottom Dock",
+                "command": "terminal:open-bottom-dock-context-menu"
+              },
+              {
+                "label": "Left Dock",
+                "command": "terminal:open-left-dock-context-menu"
+              },
+              {
+                "label": "Right Dock",
+                "command": "terminal:open-right-dock-context-menu"
+              }
+            ]
+          },
+          {
+            "label": "Close All",
+            "command": "terminal:close-all"
+          }
+        ]
+      }
+    ]
+  },
+  "menu": [
+    {
+      "label": "Packages",
+      "submenu": [
+        {
+          "label": "Terminal",
+          "submenu": [
+            {
+              "label": "Focus",
+              "command": "terminal:focus"
+            },
+            {
+              "label": "Open New",
+              "command": "terminal:open-"
+            },
+            {
+              "label": "Open New In…",
+              "submenu": [
+                {
+                  "label": "Center",
+                  "command": "terminal:open-center"
+                },
+                {
+                  "label": "Split Up",
+                  "command": "terminal:open-up"
+                },
+                {
+                  "label": "Split Down",
+                  "command": "terminal:open-down"
+                },
+                {
+                  "label": "Split Left",
+                  "command": "terminal:open-left"
+                },
+                {
+                  "label": "Split Right",
+                  "command": "terminal:open-right"
+                },
+                {
+                  "label": "Bottom Dock",
+                  "command": "terminal:open-bottom-dock"
+                },
+                {
+                  "label": "Left Dock",
+                  "command": "terminal:open-left-dock"
+                },
+                {
+                  "label": "Right Dock",
+                  "command": "terminal:open-right-dock"
+                }
+              ]
+            },
+            {
+              "label": "Close All",
+              "command": "terminal:close-all"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
