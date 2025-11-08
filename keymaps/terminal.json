@@ -22,5 +22,11 @@
     "ctrl-~ r": "terminal:open-split-right-dock",
     "ctrl-~ x": "terminal:run-selected-text",
     "ctrl-~ i": "terminal:insert-selected-text"
+  },
+  ".platform-darwin pulsar-terminal": {
+    "cmd-alt-k": "terminal:clear"
+  },
+  ".platform-win32 pulsar-terminal, .platform-linux pulsar-terminal": {
+    "ctrl-shift-k": "terminal:clear"
   }
 }

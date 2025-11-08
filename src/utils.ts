@@ -31,7 +31,7 @@ export function withResolvers<T extends unknown = void>(): {
 }
 
 
-export function recalculateActive (terminals: Set<TerminalModel>, active: TerminalModel) {
+export function recalculateActive (terminals: Set<TerminalModel>, active?: TerminalModel) {
   let terminalsList = Array.from(terminals);
   terminalsList.sort((a, b) => {
     if (active && a === active) return -1;

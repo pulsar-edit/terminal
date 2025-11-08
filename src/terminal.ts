@@ -1,9 +1,10 @@
 
-import { CompositeDisposable, Pane, TextEditorElement, WorkspaceOpenOptions } from  'atom';
+import { CommandEvent, CompositeDisposable, Pane, TextEditorElement, WorkspaceOpenOptions } from  'atom';
 import { Config, getConfigSchema } from './config';
 import { TerminalElement } from './element';
 import { TerminalModel } from './model';
 import { BASE_URI, ProfileData, Profiles } from './profiles';
+import { recalculateActive } from './utils';
 
 type OpenOptions = WorkspaceOpenOptions & {
   target?: HTMLElement
@@ -93,7 +94,6 @@ export default class Terminal {
             this.addDefaultPosition()
           );
         },
-
         'terminal:open-center': () => {
           this.openInCenterOrDock(atom.workspace);
         },
@@ -131,11 +131,38 @@ export default class Terminal {
         'terminal:run-selected-text': () => {
           this.runSelection();
         },
-        'terminal:focus': () => {
-          this.focus();
-        }
+        'terminal:focus': () => this.focus(),
+        'terminal:focus-next': () => this.focusNext(),
+        'terminal:focus-previous': () => this.focusPrevious()
       })
     );
+
+    atom.commands.add('pulsar-terminal', {
+      'core:copy': (event) => {
+        let element = this.inferTerminalElement(event);
+        if (!element) return;
+        atom.clipboard.write(element.terminal?.getSelection() ?? '');
+      },
+      'core:paste': (event) => {
+        let element = this.inferTerminalElement(event);
+        if (!element) return;
+        let textToPaste = atom.clipboard.read();
+        element.getModel()?.paste(textToPaste);
+      },
+      'terminal:restart': (event) => {
+        let element = this.inferTerminalElement(event);
+        if (!element) return;
+        element.restartPtyProcess();
+      },
+      'terminal:unfocus': () => {
+        atom.views.getView(atom.workspace).focus();
+      },
+      'terminal:clear': (event) => {
+        let element = this.inferTerminalElement(event);
+        if (!element) return;
+        element.clear();
+      }
+    });
 
     let docks = [
       atom.workspace.getRightDock(),
@@ -151,11 +178,16 @@ export default class Terminal {
             item.focusTerminal();
           }
         }
-        // TODO: Recalculate active?
+        recalculateActive(this.terminals);
       })
     });
 
     this.disposables.add(...dockDisposables);
+  }
+
+  static inferTerminalElement (event: CommandEvent): TerminalElement | null {
+    if (!event.target || !(event.target instanceof HTMLElement)) return null;
+    return event.target.closest('pulsar-terminal') as TerminalElement | null;
   }
 
   static async open (uri: string, options: OpenOptions = {}) {
@@ -192,6 +224,7 @@ export default class Terminal {
     return await this.open(Profiles.generateUri(), options);
   }
 
+  // Given an element that the user clicked on, attempt to infer a path.
   static getPath (target: HTMLElement | undefined | null) {
     if (!target) {
       let [firstPath] = atom.project.getPaths();
@@ -221,6 +254,8 @@ export default class Terminal {
     return null;
   }
 
+  // Given an existing set of options to pass to `atom.workspace.open`,
+  // augments it with the default destination, if needed.
   static addDefaultPosition (options: OpenOptions = {}) {
     let position = Config.get('behavior.defaultContainer');
     switch (position) {
@@ -280,16 +315,76 @@ export default class Terminal {
     // TODO
   }
 
+  static deactivate () {
+    this.exitAllTerminals();
+    this.disposables?.dispose();
+  }
+
+  static deserializeTerminalModel (serializedModel: { uri: string }) {
+    let pack = atom.packages.enablePackage('terminal');
+    if (!pack) return;
+    // @ts-ignore Undocumented.
+    pack.preload();
+    // @ts-ignore Undocumented.
+    pack.activateNow();
+
+    if (!Config.get('terminal.allowRelaunchingOnStartup')) return;
+    let url = new URL(serializedModel.uri);
+    let relaunch = url.searchParams.get('relaunchTerminalOnStartup');
+    if (relaunch === 'false') return;
+
+    return new TerminalModel({
+      uri: url.href,
+      terminals: this.terminals
+    });
+  }
+
   static exitAllTerminals () {
-    // TODO
+    for (let terminal of this.terminals) {
+      terminal.exit();
+    }
   }
 
   static insertSelection () {
-    // TODO
+    let selection = this.getSelectedText();
+    if (!selection) return;
+    this.performOnActiveTerminal(term => term.paste(selection));
   }
 
   static runSelection () {
-    // TODO
+    let selection = this.getSelectedText();
+    if (!selection) return;
+    this.performOnActiveTerminal(term => term.run(selection));
+  }
+
+  static performOnActiveTerminal (operation: (term: TerminalModel) => unknown) {
+    let terminal = this.getActiveTerminal();
+    if (!terminal) return;
+    operation(terminal);
+  }
+
+  static getActiveTerminal () {
+    return Array.from(this.terminals).find(term => term.isActive());
+  }
+
+  static getSelectedText () {
+    let editor = atom.workspace.getActiveTextEditor();
+    if (!editor) return '';
+
+    let selectedText = '';
+    let selection = editor.getSelectedText();
+    if (selection) {
+      selectedText = selection.replace(/[\r\n]+$/, '');
+    } else {
+      let cursor = editor.getCursorBufferPosition();
+      if (cursor) {
+        let line = editor.lineTextForBufferRow(cursor.row);
+        selectedText = line;
+        editor.moveDown(1); // TODO: ?
+      }
+    }
+
+    return selectedText;
   }
 
   static focus () {

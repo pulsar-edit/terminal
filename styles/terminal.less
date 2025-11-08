@@ -21,6 +21,9 @@ pulsar-terminal {
 
 .terminal__terminal {
   flex-grow: 1;
+  // If we let this inner element be taller than `__main`, the terminal might
+  // not resize properly when its pane container gets shorter.
+  max-height: 100%;
 }
 
 // Load the static styles here.

@@ -85,6 +85,8 @@ export class Pty {
   // Metadata about the PTY session.
   meta: Partial<PtyMeta> = {};
 
+  #readyPromise: Promise<void>;
+
   get title() {
     return this.meta.title ?? undefined;
   }
@@ -103,7 +105,7 @@ export class Pty {
 
   constructor(options: PtySpawnOptions) {
     this.options = options;
-    this.start();
+    this.#readyPromise = this.start();
   }
 
   onData (callback: (data: string) => unknown) {
@@ -301,6 +303,10 @@ export class Pty {
     });
 
     this.#killProcess();
+  }
+
+  async ready () {
+    return await this.#readyPromise;
   }
 
   pause () {

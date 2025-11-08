@@ -261,23 +261,23 @@ export function getConfigSchema () {
         },
         fallbackEnv: {
           title: 'Fallback Environment Variables',
-          description: `Environment variables that should always be present, even if the environment does not define them. Accepts a stringified JSON object.`,
+          description: `Environment variables that should always be present, even if the environment does not define them. (Accepts a stringified JSON object.)`,
           type: 'string',
           default: '{}',
           order: 6
         },
         overrideEnv: {
           title: 'Overridden Environment Variables',
-          description: `Environment variables that should always be present _and_ take precedence over values that may already be defined in the environment. Accepts a stringified JSON object.`,
+          description: `Environment variables that should always be present _and_ take precedence over values that may already be defined in the environment. (Accepts a stringified JSON object.)`,
           type: 'object',
           default: '{}',
           order: 7
         },
         deleteEnv: {
           title: 'Deleted Environment Variables',
-          description: `Environment variables that should be deleted from a terminal environment whenever present on startup. Separate multiple entries with commas.`,
+          description: `Environment variables that should be deleted from a terminal environment whenever present on startup. (Separate multiple entries with commas.)`,
           type: 'array',
-          default: [],
+          default: ['NODE_ENV'],
           order: 8
         },
         encoding: {
@@ -458,6 +458,13 @@ export function getConfigSchema () {
           type: 'boolean',
           default: true,
           order: 5
+        },
+        copyTextOnSelect: {
+          title: 'Copy Text on Select',
+          description: 'When enabled, terminal text will be copied to the clipboard immediately upon selection.',
+          type: 'boolean',
+          default: 'false',
+          order: 6
         }
       }
     }

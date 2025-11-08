@@ -12,9 +12,17 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import { LigaturesAddon } from '@xterm/addon-ligatures';
 import { Pty } from './pty';
 import { IPty, IPtyForkOptions, IWindowsPtyForkOptions } from 'node-pty';
-// @ts-ignore
-// import { shell } from '@electron/remote';
+
 import { getCurrentCwd, isWindows } from './utils';
+import { getTheme } from './themes';
+
+// TODO: Pulsar complains if I import this from `@electron/remote`. But somehow
+// I can import it from `electron` without complaint, even though all it's
+// doing under the hood is proxying that call to `@electron/remote`.
+// Investigate.
+
+// @ts-ignore
+import { remote } from 'electron';
 
 const PTY_PROCESS_OPTIONS = new Set([
   'command',
@@ -53,14 +61,15 @@ export class TerminalElement extends HTMLElement {
 
   pty: Pty | null = null;
 
-  _pty?: Partial<{
+  // Metadata about the PTY.
+  #ptyMeta: Partial<{
     command?: string;
     args?: string[];
     rows: number;
     cols: number;
     running: boolean;
     options: IPtyForkOptions | IWindowsPtyForkOptions
-  }> | undefined = undefined;
+  }> = {};
 
   div?: Record<'top' | 'main' | 'menu' | 'terminal', HTMLDivElement>;
 
@@ -105,6 +114,7 @@ export class TerminalElement extends HTMLElement {
         console.log('[Terminal] in main resize observer!');
         let last = entries[entries.length - 1];
         this.#mainContentRect = last.contentRect;
+        console.error('[Terminal] Main resize observer has contentRect of height:', last.contentRect.height);
         console.log('Refitting terminal');
         this.refitTerminal();
       });
@@ -168,6 +178,10 @@ export class TerminalElement extends HTMLElement {
     this.initialized = true;
   }
 
+  getModel () {
+    return this.model;
+  }
+
   destroy () {
     // TODO: Destroy profile menu element
     this.pty?.kill();
@@ -195,7 +209,7 @@ export class TerminalElement extends HTMLElement {
     // return this.model.profile.name;
   }
 
-  async pathIsDirectory (filePath: string) {
+  async pathIsDirectory (filePath: string | undefined | null) {
     if (!filePath) return false;
     try {
       const stats = await fs.stat(filePath);
@@ -207,7 +221,9 @@ export class TerminalElement extends HTMLElement {
   }
 
   async getCwd () {
-    let cwd = getCurrentCwd();
+    if (!this.model) return;
+    let cwd = this.model.cwd;
+    // let cwd = getCurrentCwd();
     // let cwd = this.model.profile.cwd;
     if (await this.pathIsDirectory(cwd)) {
       return cwd;
@@ -220,50 +236,35 @@ export class TerminalElement extends HTMLElement {
 
     // If we get this far, the `cwd` on the model is invalid!
     if (this.model) {
-      this.model.cwd = null;
-    }
-    cwd = Profiles.getBaseProfile().cwd;
-    if (await this.pathIsDirectory(cwd) && this.model) {
-      this.model.cwd = cwd;
-      return cwd;
+      this.model.cwd = undefined;
     }
 
-    return null;
+    return undefined;
   }
 
   getEnv () {
-    // let env: any = this.model?.profile.env ?? { ...process.env };
-    let env: any = {};
-    if (typeof env !== 'object' || Array.isArray(env) || env === null) {
-			throw new Error('Environment set is not an object.')
-		}
+    let env: Record<string, string> = {};
 
     let fallbackEnv = Config.get('terminal.fallbackEnv') ?? {};
     let overrideEnv = Config.get('terminal.overrideEnv') ?? {};
     let deleteEnv = Config.get('terminal.deleteEnv') ?? [];
 
+    // First copy over the fallbacks…
     Object.assign(env, fallbackEnv);
+    // …then whatever we inherited from `process.env`…
     Object.assign(env, { ...process.env });
+    // …then whatever we're overriding.
     Object.assign(env, overrideEnv);
 
+    // Then delete any that shouldn't be there.
     for (let key of deleteEnv) {
       delete env[key];
     }
-
-    // let setEnv = this.model?.profile.setEnv as Record<string, unknown> ?? {};
-    // let deleteEnv = this.model?.profile.deleteEnv as string[] ?? [];
-    // for (let key in setEnv) {
-    //   env[key] = setEnv[key];
-    // }
-    // for (let key of deleteEnv) {
-    //   delete env[key];
-    // }
     return env;
   }
 
   getEncoding () {
-    return Config.get('terminal.encoding');
-    // return this.model.profile.encoding;
+    return Config.get('terminal.encoding') ?? 'utf8';
   }
 
   leaveOpenAfterExit () {
@@ -283,11 +284,7 @@ export class TerminalElement extends HTMLElement {
   }
 
   isPtyProcessRunning () {
-    return this.pty && this._pty?.running;
-  }
-
-  getTheme (profile: unknown = {}) {
-    // TODO: DO THIS COMPLETELY DIFFERENTLY
+    return this.pty && this.#ptyMeta?.running;
   }
 
   getXtermOptions () {
@@ -297,17 +294,17 @@ export class TerminalElement extends HTMLElement {
       ...extraXtermOptions
     };
     xtermOptions.fontSize = Config.get('appearance.fontSize');
-    let fontFamilyKey = Config.get('appearance.useEditorFontFamily') ? 'editor.fontFamily' : 'appearance.fontFamily';
+    let fontFamilyKey = Config.get('appearance.useEditorFontFamily') ?
+      'editor.fontFamily' : 'appearance.fontFamily';
     xtermOptions.fontFamily = atom.config.get(fontFamilyKey);
-    // xtermOptions.fontSize = this.model.profile.fontSize;
-    // xtermOptions.fontFamily = this.model.profile.fontFamily;
-    // TODO: Theme!
+    xtermOptions.theme = getTheme();
 
     return structuredClone(xtermOptions);
   }
 
   setMainBackgroundColor () {
-    // TODO
+    let theme = getTheme();
+    this.style.backgroundColor = theme?.background ?? '#000000';
   }
 
   async createTerminal () {
@@ -322,14 +319,13 @@ export class TerminalElement extends HTMLElement {
     this.#fitAddon = new FitAddon();
     this.terminal.loadAddon(this.#fitAddon);
 
-    // if (Config.get('xterm.webLinks')) {
-    //   this.terminal.loadAddon(
-    //     new WebLinksAddon((_, uri) => shell.openExternal(uri))
-    //   );
-    // }
+    if (Config.get('xterm.webLinks')) {
+      this.terminal.loadAddon(
+        new WebLinksAddon((_, uri) => remote.shell.openExternal(uri))
+      );
+    }
 
     if (this.div) {
-      console.warn(`[Terminal] opening in div!`, this.div.terminal);
       this.terminal.open(this.div.terminal);
     }
 
@@ -339,18 +335,24 @@ export class TerminalElement extends HTMLElement {
 
     this.terminal.loadAddon(new LigaturesAddon());
 
-    this._pty ??= {};
-    this._pty.cols = 80;
-    this._pty.rows = 25;
+    this.#ptyMeta.cols = 80;
+    this.#ptyMeta.rows = 25;
 
     console.log('[Terminal] Created and refitting?', this.#terminalInitiallyVisible);
     this.refitTerminal();
 
+    // TEMP
+    setTimeout(() => {
+      console.warn('[Terminal] After one second, cols/rows are:', this.pty?.cols, this.pty?.rows);
+      this.refitTerminal()
+    }, 1000);
+
     this.pty = null;
-    this._pty.running = false;
+    this.#ptyMeta.running = false;
 
     console.log('[Terminal] Adding data');
     this.disposables.add(
+      // Send input to the PTY.
       this.terminal.onData((data) => {
         if (this.isPtyProcessRunning()) {
           this.pty!.write(data);
@@ -358,19 +360,20 @@ export class TerminalElement extends HTMLElement {
       })
     );
 
-    // this.disposables.add(
-    //   this.terminal.onSelectionChange(() => {
-    //     if (!this.model.profile.copyOnSelect) return;
-    //     if (!this.terminal) return;
-    //     let text = this.terminal.getSelection();
-    //     if (!text) return;
-    //
-    //     let rawLines = text.split(/\r?\n/g);
-    //     let lines = rawLines.map(line => line.replace(/\s/g, ' ').trimRight());
-    //     text = lines.join('\n');
-    //     atom.clipboard.write(text);
-    //   })
-    // );
+    this.disposables.add(
+      this.terminal.onSelectionChange(() => {
+        if (!this.terminal) return;
+        if (!Config.get('behavior.copyOnSelect')) return;
+
+        let text = this.terminal.getSelection();
+        if (!text) return;
+
+        let rawLines = text.split(/\r?\n/g);
+        let lines = rawLines.map(line => line.replace(/\s/g, ' ').trimRight());
+        text = lines.join('\n');
+        atom.clipboard.write(text);
+      })
+    );
 
     // this.disposables.add(
     //   Profiles.onDidResetBaseProfile((baseProfile) => {
@@ -460,7 +463,7 @@ export class TerminalElement extends HTMLElement {
 
   async restartPtyProcess () {
     let cwd = await this.getCwd();
-    if (this._pty?.running) {
+    if (this.#ptyMeta?.running) {
       this.pty?.removeAllListeners('exit');
       this.pty?.kill();
     }
@@ -468,47 +471,47 @@ export class TerminalElement extends HTMLElement {
     // TODO: Profile.
     this.terminal?.reset();
 
-    this._pty ??= {};
-    this._pty.options ??= {};
-    this._pty.command = this.getShellCommand();
-    this._pty.args = this.getArgs();
+    this.#ptyMeta ??= {};
+    this.#ptyMeta.options ??= {};
+    this.#ptyMeta.command = this.getShellCommand();
+    this.#ptyMeta.args = this.getArgs();
 
     let name = this.getTerminalType();
     let env = this.getEnv();
     let encoding = this.getEncoding();
 
-    this._pty.options = { name, cwd, env };
+    this.#ptyMeta.options = { name, cwd, env };
 
-    if (encoding) {
-      // Only set encofing if there's an actual encoding to set.
-      this._pty.options.encoding = encoding;
+    if (encoding && this.#ptyMeta.options) {
+      // Only set encoding if there's an actual encoding to set.
+      this.#ptyMeta.options.encoding = encoding;
     }
 
-    this._pty.options.cols = this.pty?.cols;
-    this._pty.options.rows = this.pty?.rows;
+    this.#ptyMeta.options.cols = this.pty?.cols;
+    this.#ptyMeta.options.rows = this.pty?.rows;
 
     this.pty = null;
-    this._pty.running = false;
+    this.#ptyMeta.running = false;
 
     try {
       console.log('[Terminal] Declaring new PTY with args:', {
-        file: this._pty.command ?? '',
-        args: this._pty.args,
-        options: this._pty.options
+        file: this.#ptyMeta.command ?? '',
+        args: this.#ptyMeta.args,
+        options: this.#ptyMeta.options
       });
       this.pty = new Pty({
-        file: this._pty.command ?? '',
-        args: this._pty.args,
-        options: this._pty.options
+        file: this.#ptyMeta.command ?? '',
+        args: this.#ptyMeta.args,
+        options: this.#ptyMeta.options
       })
 
       if (this.pty.process) {
-        this._pty.running = true;
+        this.#ptyMeta.running = true;
         this.pty.onData((data) => {
-          console.log('[Terminal] [Element] got data', data);
           if (!this.terminal || !this.model || !this.pty) {
             throw new Error('No terminal or model for incoming PTY data');
           }
+          // Whenever we receive data, check for an updated title.
           if (!isWindows() && this.pty.title) {
             this.model.title = this.pty.title;
           }
@@ -516,17 +519,19 @@ export class TerminalElement extends HTMLElement {
           this.model.handleNewData();
         });
         this.pty.onExit((_exitCode) => {
-          console.warn('[Terminal] ON EXIT!', _exitCode);
-          if (!this.terminal || !this.model || !this._pty) {
+          if (!this.terminal || !this.model || !this.#ptyMeta) {
             throw new Error('No terminal or model for incoming PTY data');
           }
-          this._pty.running = false;
+          this.#ptyMeta.running = false;
           if (!this.leaveOpenAfterExit()) {
             this.model.exit();
           } else {
             // TODO: Show a notification whether successful exit or not? Feels weird.
           }
         });
+        console.error('[Terminal] WHAT ABOUT NOW')
+        await this.pty.ready();
+        this.refitTerminal();
         // this.pty.process.on('data', (data) => {
         //   let oldTitle = ''
         //   if (this.model.profile.title !== null) {
@@ -554,9 +559,9 @@ export class TerminalElement extends HTMLElement {
         }
       }
     } catch (error) {
-      let message = `Launching ‘${this._pty.command}’ raised the following error: ${(error as any).message}`;
+      let message = `Launching ‘${this.#ptyMeta.command}’ raised the following error: ${(error as any).message}`;
       if ((error as any).message.startsWith('File not found:')) {
-        message = `Could not find command ‘${this._pty.command}’.`;
+        message = `Could not find command ‘${this.#ptyMeta.command}’.`;
       }
       this.showNotification(message, 'error');
     }
@@ -581,6 +586,7 @@ export class TerminalElement extends HTMLElement {
   }
 
   refitTerminal () {
+    console.log('[Terminal] Refitting at', performance.now());
     if (!this.#terminalInitiallyVisible) {
       console.log('[Terminal] Skipped refit because terminal not visible yet');
       return;
@@ -596,16 +602,25 @@ export class TerminalElement extends HTMLElement {
 
     this.#fitAddon!.fit();
     let geometry = this.#fitAddon!.proposeDimensions();
-    if (!geometry || !this.isPtyProcessRunning()) return;
+    if (!geometry || !this.isPtyProcessRunning()) {
+      if (!geometry) {
+        console.log('[Terminal] Got no geometry from the refit algorithm!')
+      }
+      if (!this.isPtyProcessRunning()) {
+        console.log('[Terminal] PTY is not running yet, so there’s no point!');
+      }
+      return
+    }
     console.log('[Terminal] Refit has proposed dimensions of… cols:', geometry.cols, 'rows:', geometry.rows);
-    if (!this._pty || !this.pty) {
+    if (!this.#ptyMeta || !this.pty) {
       throw new Error('Impossible!')
     }
-    if (this._pty.cols !== geometry.cols || this._pty.rows !== geometry.rows) {
-      console.log('[Terminal] Existing dimensions are, by contrast,', this._pty.cols, 'and', this._pty.rows);
+    if (this.#ptyMeta.cols !== geometry.cols || this.#ptyMeta.rows !== geometry.rows) {
+      console.log('[Terminal] Existing dimensions are, by contrast,', this.#ptyMeta.cols, 'and', this.#ptyMeta.rows);
+      console.warn('RESIZING TO', geometry.cols, geometry.rows);
       this.pty.resize(geometry.cols, geometry.rows);
-      this._pty.cols = geometry.cols;
-      this._pty.rows = geometry.rows;
+      this.#ptyMeta.cols = geometry.cols;
+      this.#ptyMeta.rows = geometry.rows;
     }
   }
 

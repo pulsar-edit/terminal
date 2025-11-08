@@ -1,6 +1,5 @@
-import { Dock, Emitter, Pane, PaneItem } from "atom";
+import { Dock, Emitter, Pane, PaneItem, PaneItemLocation } from "atom";
 import { TerminalElement } from "./element";
-import { Profiles, ProfileData } from './profiles';
 
 import path from 'path';
 // import os from 'os';
@@ -16,6 +15,8 @@ export type TerminalModelOptions = {
 
 const DEFAULT_TITLE = 'Terminal';
 
+const ALLOWED_LOCATIONS: PaneItemLocation[]  = ['left', 'right', 'center', 'bottom'];
+
 export class TerminalModel {
 
   static is (other: unknown): other is TerminalModel {
@@ -24,7 +25,7 @@ export class TerminalModel {
 
   options: TerminalModelOptions;
   uri: string;
-  cwd: string | null = null;
+  public cwd: string | undefined = undefined;
   terminals: TerminalModelOptions['terminals'];
   sessionId: string;
   initializedPromise: Promise<void>;
@@ -53,13 +54,7 @@ export class TerminalModel {
     this.activeIndex = this.terminals.size;
     this.title = DEFAULT_TITLE;
 
-    this.cwd = url.searchParams.get('cwd');
-
-    // TODO
-    // this.profile = Profiles.createProfileDataFromUri(this.uri);
-    // if (this.profile.title !== null) {
-    //   this.title = this.profile.title as string | undefined;
-    // }
+    this.cwd = url.searchParams.get('cwd') ?? undefined;
 
     this.terminals.add(this);
 
@@ -96,13 +91,6 @@ export class TerminalModel {
       cwd = Config.get('terminal.cwd');
     }
 
-    // let baseProfile = Profiles.getBaseProfile();
-
-    // if (!cwd) {
-    //   this.profile.cwd = (baseProfile.cwd);
-    //   return;
-    // }
-
     // Now that we have a `cwd`, check if it exists on the filesystem. If it
     // doesn't, bail!
     let exists = cwd && await fs.exists(cwd);
@@ -131,9 +119,7 @@ export class TerminalModel {
       }
     }
 
-    this.cwd = cwd ?? null;
-
-    // this.profile.cwd = (baseProfile.cwd);
+    this.cwd = cwd ?? undefined;
   }
 
   // serialize () {
@@ -150,12 +136,16 @@ export class TerminalModel {
   }
 
   getTitle () {
-    let prefix = this.isActiveTerminal() ? `${this.getActiveIndicator()}` : '';
+    let prefix = this.isActive() ? `${this.getActiveIndicator()}` : '';
     return `${prefix}${this.title}`;
   }
 
   getPath () {
     return getCurrentCwd();
+  }
+
+  getAllowedLocations() {
+    return ALLOWED_LOCATIONS;
   }
 
   getLongTitle () {
@@ -204,7 +194,7 @@ export class TerminalModel {
     this.#lastTitle = this.title;
   }
 
-  isActiveTerminal () {
+  isActive () {
     return this.activeIndex === 0 && this.isVisible();
   }
 
@@ -245,7 +235,6 @@ export class TerminalModel {
 
   getProfile () {
     return {} // TODO
-    // return this.profile;
   }
 
   applyProfileChanges (_profileChanges: unknown) {
@@ -257,9 +246,10 @@ export class TerminalModel {
   }
 
   getSessionParameters () {
-    let url = Profiles.generateUriFromProfileData(this.getProfile());
-    url.searchParams.sort();
-    return url.searchParams.toString();
+    return '';
+    // let url = Profiles.generateUriFromProfileData(this.getProfile());
+    // url.searchParams.sort();
+    // return url.searchParams.toString();
   }
 
   refitTerminal () {
@@ -283,11 +273,13 @@ export class TerminalModel {
     this.element?.restartPtyProcess();
   }
 
+  // This can't be called `copy` because a method called `copy`, if present,
+  // will be assumed to be how a pane item duplicates itself.
   copyFromTerminal () {
     return this.element?.terminal?.getSelection();
   }
 
-  pasteToTerminal (text: string) {
+  paste (text: string) {
     this.element?.pty?.write(text);
   }
 
