@@ -64,3 +64,15 @@ export async function timeout(promise: Promise<unknown>, timeoutMs: number = 500
   });
   return Promise.race([promise, rejectPromise]);
 }
+
+
+export function debounce(
+  callback: (...args: unknown[]) => void,
+  waitMs: number = 300
+) {
+  let timeoutId: NodeJS.Timeout;
+  return (...args: unknown[]) => {
+    clearTimeout(timeoutId)
+    timeoutId = setTimeout(() => callback(...args), waitMs);
+  }
+}

@@ -478,7 +478,7 @@ export function getConfigSchema () {
           default: 'visible',
           order: 2
         },
-        runInActiveTerminal: {
+        runInActive: {
           title: 'Run in Active Terminal',
           description: `When enabled, commands invoked via the service API will try to reuse the active terminal (if there is one) instead of opening a new terminal.`,
           type: 'boolean',

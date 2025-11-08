@@ -77,7 +77,7 @@ export class TerminalModel {
           this.cwd = dir;
           return;
         }
-      } else if (typeof previousActiveItem.selectedPath === 'string') {
+      } else if (typeof previousActiveItem?.selectedPath === 'string') {
         cwd = previousActiveItem.selectedPath;
         let [dir] = atom.project.relativizePath(cwd ?? '');
         if (dir) {
@@ -122,13 +122,13 @@ export class TerminalModel {
     this.cwd = cwd ?? undefined;
   }
 
-  // serialize () {
-  //   return {
-  //     deserializer: 'TerminalModel',
-  //     version: '1',
-  //     uri: Profiles.generateUriFromProfileData(this.profile)
-  //   };
-  // }
+  serialize () {
+    return {
+      deserializer: 'TerminalModel',
+      version: '1.0.0',
+      uri: this.uri
+    };
+  }
 
   destroy () {
     this.element?.destroy();
@@ -297,6 +297,10 @@ export class TerminalModel {
 
   getElement () {
     return this.element!;
+  }
+
+  updateTheme () {
+    this.element?.updateTheme();
   }
 
   setIndex (newIndex: number) {

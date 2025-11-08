@@ -3,41 +3,33 @@ import { CommandEvent, CompositeDisposable, Pane, TextEditorElement, WorkspaceOp
 import { Config, getConfigSchema } from './config';
 import { TerminalElement } from './element';
 import { TerminalModel } from './model';
-import { BASE_URI, ProfileData, Profiles } from './profiles';
-import { recalculateActive } from './utils';
+import { debounce, recalculateActive } from './utils';
+import crypto from 'crypto';
 
 type OpenOptions = WorkspaceOpenOptions & {
   target?: HTMLElement
 };
 
+export const BASE_URI = `terminal://`;
+
 export default class Terminal {
 
-  static disposables: CompositeDisposable;
+  static subscriptions: CompositeDisposable;
   static terminals: Set<TerminalModel>;
 
   static config: Record<string, unknown> = getConfigSchema();
 
   static activate (_state: unknown) {
-    console.warn('Terminal activate!', _state)
-    this.disposables = new CompositeDisposable();
+    this.subscriptions = new CompositeDisposable();
     this.terminals = new Set();
 
-    this.disposables.add(
-      atom.config.onDidChange(
-        'editor.fontFamily',
-        () => Profiles.resetBaseProfile()
-      )
-    );
-
-    this.disposables.add(
+    this.subscriptions.add(
       // Register view provider for the terminal emulator.
       atom.views.addViewProvider(TerminalModel, (model) => {
         let element = new TerminalElement();
         element.initialize(model as TerminalModel);
         return element;
       }),
-
-      // Register view provider for the terminal emulator profile menu item.
 
       // ... et cetera
 
@@ -55,7 +47,7 @@ export default class Terminal {
       atom.workspace.observePanes((pane) => {
         // In callback, set another callback to run on current and future
         // items.
-        this.disposables.add(
+        this.subscriptions.add(
           pane.observeItems((item) => {
             if (TerminalModel.is(item)) {
               item.moveToPane(pane);
@@ -78,9 +70,12 @@ export default class Terminal {
 
       // Commands.
       atom.commands.add('atom-workspace', {
+        // Focuses the active terminal; if there is no active terminal, creates
+        // a new terminal in the default location and focuses it.
+        'terminal:focus': () => this.focus(),
         'terminal:open': () => {
           this.open(
-            Profiles.generateUri(),
+            this.generateUri(),
             this.addDefaultPosition()
           );
         },
@@ -88,16 +83,16 @@ export default class Terminal {
           this.openInCenterOrDock(atom.workspace);
         },
         'terminal:open-split-up': () => {
-          this.open(Profiles.generateUri(), { split: 'up' });
+          this.open(this.generateUri(), { split: 'up' });
         },
         'terminal:open-split-down': () => {
-          this.open(Profiles.generateUri(), { split: 'down' });
+          this.open(this.generateUri(), { split: 'down' });
         },
         'terminal:open-split-left': () => {
-          this.open(Profiles.generateUri(), { split: 'left' });
+          this.open(this.generateUri(), { split: 'left' });
         },
         'terminal:open-split-right': () => {
-          this.open(Profiles.generateUri(), { split: 'right' });
+          this.open(this.generateUri(), { split: 'right' });
         },
         'terminal:open-split-bottom-dock': () => {
           this.openInCenterOrDock(atom.workspace.getBottomDock());
@@ -118,7 +113,6 @@ export default class Terminal {
         'terminal:run-selected-text': () => {
           this.runSelection();
         },
-        'terminal:focus': () => this.focus(),
         'terminal:focus-next': () => this.focusNext(),
         'terminal:focus-previous': () => this.focusPrevious()
       })
@@ -170,7 +164,6 @@ export default class Terminal {
         let didRespond = element.findPrevious();
         if (!didRespond) event.abortKeyBinding();
       }
-
     });
 
     atom.commands.add('.terminal-find-palette atom-text-editor', {
@@ -182,6 +175,14 @@ export default class Terminal {
         if (!didHide) event.abortKeyBinding();
       }
     });
+
+    let debouncedUpdateTheme = debounce(() => this.updateTheme());
+
+    this.subscriptions.add(
+      // Immediately apply new theme colors.
+      atom.config.onDidChange('terminal.appearance', debouncedUpdateTheme),
+      atom.themes.onDidChangeActiveThemes(debouncedUpdateTheme)
+    );
 
     let docks = [
       atom.workspace.getRightDock(),
@@ -201,15 +202,16 @@ export default class Terminal {
       })
     });
 
-    this.disposables.add(...dockDisposables);
+    this.subscriptions.add(...dockDisposables);
   }
 
+  // Given a command event, determine the
   static inferTerminalElement (event: CommandEvent): TerminalElement | null {
     if (!event.target || !(event.target instanceof HTMLElement)) return null;
     return event.target.closest('pulsar-terminal') as TerminalElement | null;
   }
 
-  static async open (uri: string, options: OpenOptions = {}) {
+  static async open (uri: string, options: OpenOptions = {}): Promise<TerminalModel> {
     let url = new URL(uri);
     if (url.searchParams.get('relaunchTerminalOnStartup') === null) {
       url.searchParams.set('relaunchTerminalOnStartup', 'false');
@@ -222,15 +224,37 @@ export default class Terminal {
       }
     }
 
-    return await atom.workspace.open(url.href, options);
+    return await atom.workspace.open(url.href, options) as Promise<TerminalModel>;
   }
 
-  static openTerminal (profile: ProfileData | undefined = undefined, options: OpenOptions = {}) {
+  /**
+   * Service function for opening a terminal.
+   */
+  static async openTerminal (options: OpenOptions = {}) {
     options = this.addDefaultPosition(options);
-    return this.open(
-      Profiles.generateUriFromProfileData(profile).toString(),
-      options
-    );
+    return await this.open(this.generateUri(), options);
+  }
+
+  /**
+   * Service function which opens a terminal and runs the given commands.
+   *
+   * Configuration determines whether a new terminal is opened or an existing
+   * terminal is reused.
+   */
+  static async runCommands (commands: string[]) {
+    let terminal;
+    if (Config.get('behavior.runInActive')) {
+      terminal = this.getActiveTerminal();
+    }
+    if (!terminal) {
+      terminal = await this.open(this.generateUri(), this.addDefaultPosition());
+    }
+    if (!terminal.element) return;
+    await terminal.element.ready();
+
+    for (let command of commands) {
+      terminal.run(command);
+    }
   }
 
   static async openInCenterOrDock (
@@ -240,7 +264,7 @@ export default class Terminal {
     let pane = centerOrDock.getActivePane();
     if (pane) options.pane = pane;
 
-    return await this.open(Profiles.generateUri(), options);
+    return await this.open(this.generateUri(), options);
   }
 
   // Given an element that the user clicked on, attempt to infer a path.
@@ -332,10 +356,17 @@ export default class Terminal {
 
   static deactivate () {
     this.exitAllTerminals();
-    this.disposables?.dispose();
+    this.subscriptions?.dispose();
+  }
+
+  static updateTheme () {
+    for (let terminal of this.terminals) {
+      terminal.updateTheme();
+    }
   }
 
   static deserializeTerminalModel (serializedModel: { uri: string }) {
+    console.warn('[Terminal] deserializeTerminalModel:', serializedModel);
     let pack = atom.packages.enablePackage('terminal');
     if (!pack) return;
     // @ts-ignore Undocumented.
@@ -343,10 +374,10 @@ export default class Terminal {
     // @ts-ignore Undocumented.
     pack.activateNow();
 
-    if (!Config.get('terminal.allowRelaunchingOnStartup')) return;
+    // if (!Config.get('terminal.allowRelaunchingOnStartup')) return;
     let url = new URL(serializedModel.uri);
-    let relaunch = url.searchParams.get('relaunchTerminalOnStartup');
-    if (relaunch === 'false') return;
+    // let relaunch = url.searchParams.get('relaunchTerminalOnStartup');
+    // if (relaunch === 'false') return;
 
     return new TerminalModel({
       uri: url.href,
@@ -439,6 +470,49 @@ export default class Terminal {
       prevIndex += list.length;
     }
     list[prevIndex].focusTerminal(true);
+  }
+
+  static generateUri() {
+    return `${BASE_URI}${crypto.randomUUID()}/`;
+  }
+
+  // SERVICES
+  // ========
+
+  static provideTerminalService () {
+    return {
+      run: (commands: string[]) => {
+        return this.runCommands(commands);
+      },
+      open: () => {
+        return this.openTerminal();
+      }
+    }
+  }
+
+  /**
+   * Provide the `platformioIDETerminal` service.
+   */
+  static providePlatformioIDETerminalService () {
+    return {
+      run: (commands: string[]) => {
+        return this.runCommands(commands);
+      },
+      open: () => {
+        return this.openTerminal();
+      },
+      // This is of limited utility because the implementation details of these
+      // views vary from those of the original package. Consumer beware.
+      getTerminalViews: () => {
+        return Array.from(this.terminals);
+      },
+      // Best evidence is that this method was thought to be needed to copy
+      // environment variables from one environment to another… when, in fact,
+      // they were executing in the same environment. Hence this is a stub.
+      updateProcessEnv: (_vars: Record<string, string>) => {
+        // No-op.
+      }
+    }
   }
 
 }

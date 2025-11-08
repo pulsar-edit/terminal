@@ -16,7 +16,7 @@ import FindPalette from './find-palette';
 import { Pty } from './pty';
 import { IPtyForkOptions, IWindowsPtyForkOptions } from 'node-pty';
 
-import { isWindows } from './utils';
+import { debounce, isWindows } from './utils';
 import { getTheme } from './themes';
 
 // TODO: Pulsar complains if I import this from `@electron/remote`. But somehow
@@ -109,10 +109,12 @@ export class TerminalElement extends HTMLElement {
       await this.model.ready();
       this.setAttribute('session-id', this.model.getSessionId());
 
+      let debouncedRefitTerminal = debounce(() => this.refitTerminal());
+
       this.#mainResizeObserver = new ResizeObserver((entries) => {
         let last = entries[entries.length - 1];
         this.#mainContentRect = last.contentRect;
-        this.refitTerminal();
+        debouncedRefitTerminal();
       });
       this.#mainResizeObserver.observe(this.div.main);
 
@@ -143,12 +145,24 @@ export class TerminalElement extends HTMLElement {
       );
 
       this.subscriptions.add(
+        // Immediately apply new `fontSize` values when appropriate.
         atom.config.onDidChange(
-          'terminal.appearance',
-          () => this.resetTheme()
+          'editor.fontSize',
+          ({ newValue }) => {
+            if (!Config.get('appearance.useEditorFontSize')) return;
+            if (!this.terminal) return;
+            this.terminal.options.fontSize = newValue;
+            this.refitTerminal();
+          }
         ),
-        atom.themes.onDidChangeActiveThemes(
-          () => this.resetTheme()
+        atom.config.onDidChange(
+          'terminal.appearance.fontSize',
+          ({ newValue }) => {
+            if (Config.get('appearance.useEditorFontSize')) return;
+            if (!this.terminal) return;
+            this.terminal.options.fontSize = newValue;
+            this.refitTerminal();
+          }
         )
       );
 
@@ -159,7 +173,7 @@ export class TerminalElement extends HTMLElement {
       //   'wheel',
       //   (event) => {
       //     if (!event.ctrlKey) return;
-      //     if (!atom.config.get('behavior.zoomFontWhenCtrlScrolling')) return;
+      //     if (!atom.config.get('editor.zoomFontWhenCtrlScrolling')) return;
       //     event.stopPropagation();
       //
       //     let delta = event.deltaY < 0 ? 1 : -1;
@@ -383,26 +397,6 @@ export class TerminalElement extends HTMLElement {
       })
     );
 
-    // this.disposables.add(
-    //   Profiles.onDidResetBaseProfile((baseProfile) => {
-    //     let frontEndSettings = {};
-    //     for (let data of CONFIG_DATA) {
-    //       if (!data.profileKey) continue;
-    //       if (data.terminalFrontEnd) {
-    //         frontEndSettings[data.profileKey] = baseProfile[data.profileKey];
-    //       }
-    //     }
-    //     let profileChanges = Profiles.diffProfiles(
-    //       this.model.getProfile(),
-    //       // Only allow changes to settings related to the terminal front end
-  	// 			// to be applied to existing terminals.
-    //       frontEndSettings
-    //     );
-    //
-    //     this.model.applyProfileChanges(profileChanges);
-    //   })
-    // );
-
     if (this.shouldPromptToStartup()) {
       this.promptToStartup();
     } else {
@@ -410,7 +404,7 @@ export class TerminalElement extends HTMLElement {
     }
   }
 
-  resetTheme () {
+  updateTheme () {
     if (!this.terminal) return;
     let theme = getTheme();
     this.setMainBackgroundColor(theme);
