@@ -43,11 +43,13 @@ import typescript from '@rollup/plugin-typescript';
 export default [{
   input: 'src/terminal.ts',
   output: {
-    file: 'lib/terminal.js',
+    dir: 'lib',
     format: 'cjs',
     exports: 'auto',
     interop: 'auto',
-    sourcemap: true
+    sourcemap: true,
+    preserveModules: true,
+    preserveModulesRoot: 'src'
   },
   plugins: [
     resolve({
