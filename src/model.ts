@@ -2,7 +2,10 @@ import { Dock, Emitter, Pane, PaneItem, PaneItemLocation } from "atom";
 import { TerminalElement } from "./element";
 
 import path from 'path';
-// import os from 'os';
+// Use Node's URL-parsing library because of greater tolerance of nonstandard
+// protocols.
+import { URL } from 'url';
+import os from 'os';
 
 import fs from 'fs-extra';
 import { generateUri, getCurrentCwd, recalculateActive } from "./utils";
@@ -23,6 +26,10 @@ export class TerminalModel {
     return other instanceof TerminalModel;
   }
 
+  static recalculateActive (terminals: Set<TerminalModel>, active?: TerminalModel) {
+    return recalculateActive(terminals, active);
+  }
+
   options: TerminalModelOptions;
   public cwd: string | undefined = undefined;
   private url: URL;
@@ -39,9 +46,9 @@ export class TerminalModel {
 
   emitter = new Emitter();
 
-  element: TerminalElement | null = null;
-  pane: Pane | null = null;
-  dock: Dock | null = null;
+  element: TerminalElement | undefined = undefined;
+  pane: Pane | undefined = undefined;
+  dock: Dock | undefined = undefined;
 
   #lastTitle?: string
 
@@ -156,7 +163,7 @@ export class TerminalModel {
   }
 
   getPath () {
-    return getCurrentCwd();
+    return this.cwd ?? getCurrentCwd();
   }
 
   getAllowedLocations() {
@@ -191,7 +198,7 @@ export class TerminalModel {
   }
 
   handleNewData () {
-    this.pane ??= atom.workspace.paneForItem(this) ?? null;
+    this.pane ??= atom.workspace.paneForItem(this) ?? undefined;
     let oldIsModified = this.modified;
 
     let item: PaneItem | undefined = undefined;
@@ -210,7 +217,8 @@ export class TerminalModel {
   }
 
   isActive () {
-    return this.activeIndex === 0 && this.isVisible();
+    const activeLogic = Config.get('behavior.activeTerminalLogic');
+    return this.activeIndex === 0 && (this.isVisible() || activeLogic === 'all');
   }
 
   isVisible () {
@@ -221,8 +229,8 @@ export class TerminalModel {
     return false;
   }
 
-  setElement (element: TerminalElement | null) {
-    this.element = element;
+  setElement (element: TerminalElement | undefined) {
+    this.element = element ?? undefined;
   }
 
   moveToPane (pane: Pane) {
@@ -240,7 +248,7 @@ export class TerminalModel {
         this.dock = atom.workspace.getBottomDock();
         break;
       default:
-        this.dock = null;
+        this.dock = undefined;
     }
   }
 
@@ -257,7 +265,7 @@ export class TerminalModel {
   }
 
   getSessionId () {
-    return this.sessionId;
+    return this.url.host;
   }
 
   getSessionParameters () {
@@ -312,7 +320,7 @@ export class TerminalModel {
   }
 
   run (command: string) {
-    this.element?.pty?.write(command);
+    this.element?.pty?.write(command + os.EOL.charAt(0));
   }
 
   clear () {
@@ -333,6 +341,6 @@ export class TerminalModel {
 
   setIndex (newIndex: number) {
     this.activeIndex = newIndex;
-    this.emitter.emit('did-change-title');
+    this.emitter.emit('did-change-title', this.getTitle());
   }
 }

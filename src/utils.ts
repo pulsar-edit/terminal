@@ -33,13 +33,16 @@ export function withResolvers<T extends unknown = void>(): {
 }
 
 export function recalculateActive (terminals: Set<TerminalModel>, active?: TerminalModel) {
+  let allowHidden = Config.get('behavior.activeTerminalLogic') === 'all';
   let terminalsList = Array.from(terminals);
   terminalsList.sort((a, b) => {
     if (active && a === active) return -1;
     if (active && b === active) return 1;
 
-    if (a.isVisible() && !b.isVisible()) return -1;
-    if (b.isVisible() && !a.isVisible()) return 1;
+    if (!allowHidden) {
+      if (a.isVisible() && !b.isVisible()) return -1;
+      if (b.isVisible() && !a.isVisible()) return 1;
+    }
 
     return a.activeIndex - b.activeIndex;
   });

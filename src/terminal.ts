@@ -3,8 +3,7 @@ import { CommandEvent, CompositeDisposable, Pane, TextEditorElement, WorkspaceOp
 import { Config, getConfigSchema } from './config';
 import { TerminalElement } from './element';
 import { TerminalModel } from './model';
-import { BASE_URI, debounce, recalculateActive, generateUri, PACKAGE_NAME } from './utils';
-import crypto from 'crypto';
+import { BASE_URI, debounce, recalculateActive, generateUri } from './utils';
 
 type OpenOptions = WorkspaceOpenOptions & {
   target?: HTMLElement | EventTarget | null
@@ -25,14 +24,12 @@ export default class Terminal {
     this.terminals = new Set();
 
     this.subscriptions.add(
-      // Register view provider for the terminal emulator.
+      // Register a view provider for the terminal emulator.
       atom.views.addViewProvider(TerminalModel, (model) => {
         let element = new TerminalElement();
         element.initialize(model as TerminalModel);
         return element;
       }),
-
-      // ... et cetera
 
       // Add an opener for the terminal emulator.
       atom.workspace.addOpener((uri: string) => {
@@ -44,10 +41,8 @@ export default class Terminal {
         return item;
       }),
 
-      // Set a callback to run on current and future panes.
+      // Keep track of where terminal pane items are moved.
       atom.workspace.observePanes((pane) => {
-        // In callback, set another callback to run on current and future
-        // items.
         this.subscriptions.add(
           pane.observeItems((item) => {
             if (TerminalModel.is(item)) {
