@@ -19,13 +19,11 @@ import { IPtyForkOptions, IWindowsPtyForkOptions } from 'node-pty';
 import { debounce, isWindows } from './utils';
 import { getTheme } from './themes';
 
-// TODO: Pulsar complains if I import this from `@electron/remote`. But somehow
-// I can import it from `electron` without complaint, even though all it's
-// doing under the hood is proxying that call to `@electron/remote`!
-// Investigate.
-
-// @ts-ignore
-import { remote } from 'electron';
+// TODO: Right now we're using `@electron/remote` as an explicit dependency;
+// but when this becomes a builtin package, `@electron/remote` will be
+// ambiently available. Better to use that without declaring it so as to avoid
+// version clashes.
+import { shell } from '@electron/remote';
 
 // Given a line height and a font size, attempts to adjust the line height so
 // that it results in a pixel height that snaps to the nearest pixel (or
@@ -71,6 +69,10 @@ export class TerminalElement extends HTMLElement {
     running: boolean;
     options: IPtyForkOptions | IWindowsPtyForkOptions
   }> = {};
+
+  static create () {
+    return document.createElement('pulsar-terminal') as TerminalElement;
+  }
 
   async initialize (model: TerminalModel) {
     this.model = model;
@@ -341,7 +343,7 @@ export class TerminalElement extends HTMLElement {
 
     if (Config.get('xterm.webLinks')) {
       this.terminal.loadAddon(
-        new WebLinksAddon((_, uri) => remote.shell.openExternal(uri))
+        new WebLinksAddon((_, uri) => shell.openExternal(uri))
       );
     }
 
@@ -369,7 +371,6 @@ export class TerminalElement extends HTMLElement {
 
     this.refitTerminal();
 
-    this.pty = undefined;
     this.#ptyMeta.running = false;
 
     this.subscriptions.add(
@@ -446,8 +447,12 @@ export class TerminalElement extends HTMLElement {
   showNotification (
     message: string,
     infoType: string,
-    restartButtonText: string = 'Restart'
+    { restartButtonText = 'Restart', force = false }: {
+      restartButtonText?: string,
+      force?: boolean
+    } = {}
   ) {
+    if (!Config.get('behavior.showNotifications') && !force) return;
     let messageElement = document.createElement('div');
     let restartButtonElement = document.createElement('button');
     restartButtonElement.appendChild(document.createTextNode(restartButtonText));
@@ -457,7 +462,11 @@ export class TerminalElement extends HTMLElement {
       () => this.restartPtyProcess(),
       { passive: true }
     );
-    restartButtonElement.classList.add('btn', `btn-${infoType}`, 'terminal__btn-restart');
+    restartButtonElement.classList.add(
+      'btn',
+      `btn-${infoType}`,
+      'terminal__btn-restart'
+    );
 
     messageElement.classList.add(`terminal__notification--${infoType}`);
     messageElement.appendChild(document.createTextNode(message));
@@ -468,51 +477,44 @@ export class TerminalElement extends HTMLElement {
       this.div.top.appendChild(messageElement);
     }
 
-    if (Config.get('behavior.showNotifications')) {
-      switch (infoType) {
-        case 'success':
-          atom.notifications.addSuccess(message);
-          break;
-        case 'error':
-          atom.notifications.addError(message);
-          break;
-        case 'warning':
-          atom.notifications.addWarning(message);
-          break;
-        case 'info':
-          atom.notifications.addInfo(message);
-          break;
-        default:
-          throw new Error(`Unknown notification type: ${infoType}`);
-      }
+    switch (infoType) {
+      case 'success':
+        atom.notifications.addSuccess(message);
+        break;
+      case 'error':
+        atom.notifications.addError(message);
+        break;
+      case 'warning':
+        atom.notifications.addWarning(message);
+        break;
+      case 'info':
+        atom.notifications.addInfo(message);
+        break;
+      default:
+        throw new Error(`Unknown notification type: ${infoType}`);
     }
   }
 
   async promptToStartup () {
     let message;
-    let title = Config.get('terminal.title');
 
-    if (title === null) {
-      let command = [this.getShellCommand(), ...this.getArgs()];
-      message = `New command ${JSON.stringify(command)} ready to start.`;
-    } else {
-      message = `New command for profile ${title} ready to start.`;
-    }
+    let command = [this.getShellCommand(), ...this.getArgs()];
+    message = `New command ${JSON.stringify(command)} ready to start.`;
 
-    this.showNotification(message, 'info', 'Start');
+    this.showNotification(message, 'info', { restartButtonText: 'Start' });
   }
 
   async restartPtyProcess () {
-    let cwd = await this.getCwd();
     if (this.#ptyMeta?.running) {
       this.pty?.removeAllListeners('exit');
       this.pty?.kill();
+      this.#ptyMeta.running = false;
     }
 
-    // TODO: Profile.
+    let cwd = await this.getCwd();
+
     this.terminal?.reset();
 
-    this.#ptyMeta ??= {};
     this.#ptyMeta.options ??= {};
     this.#ptyMeta.command = this.getShellCommand();
     this.#ptyMeta.args = this.getArgs();
@@ -531,6 +533,14 @@ export class TerminalElement extends HTMLElement {
     this.#ptyMeta.options.cols = this.pty?.cols;
     this.#ptyMeta.options.rows = this.pty?.rows;
 
+    // Because we `await` after the we check for the presence of the PTY
+    // earlier, we need to check again just to make sure.
+    if (this.#ptyMeta?.running || this.pty) {
+      this.pty?.removeAllListeners('exit');
+      this.pty?.kill();
+      this.#ptyMeta.running = false;
+    }
+
     this.pty = undefined;
     this.#ptyMeta.running = false;
 
@@ -539,10 +549,8 @@ export class TerminalElement extends HTMLElement {
         file: this.#ptyMeta.command ?? '',
         args: this.#ptyMeta.args,
         options: this.#ptyMeta.options
-      })
-
+      });
       if (this.pty.process) {
-        this.#ptyMeta.running = true;
         this.pty.onData((data) => {
           if (!this.terminal || !this.model || !this.pty) {
             throw new Error('No terminal or model for incoming PTY data');
@@ -565,23 +573,32 @@ export class TerminalElement extends HTMLElement {
           if (!this.leaveOpenAfterExit()) {
             this.model.exit();
           } else {
-            // TODO: Show a notification whether successful exit or not? Feels weird.
+            // TODO: Show a notification whether successful exit or not? Feels
+            // weird.
           }
         });
-        await this.pty.ready();
+        await this.pty.booted();
+        this.#ptyMeta.running = true;
         this.refitTerminal();
         this.focusTerminal();
 
         if (this.div) {
           this.div.top.innerHTML = ''; // TODO
         }
+        await this.pty.ready();
       }
     } catch (error) {
+      // TODO: If there's an error in spawning the PTY, it will likely surface
+      // in async fashion. But even that seems not to be happening in tests!
+      // Pointing to an invalid file path for the initial command doesn't seem
+      // to trigger any error; it just does nothing indefinitely.
       let message = `Launching ‘${this.#ptyMeta.command}’ raised the following error: ${(error as any).message}`;
       if ((error as any).message.startsWith('File not found:')) {
         message = `Could not find command ‘${this.#ptyMeta.command}’.`;
       }
-      this.showNotification(message, 'error');
+      this.showNotification(message, 'error', { force: true });
+      this.pty = undefined;
+      this.#ptyMeta.running = false;
     }
   }
 
@@ -607,7 +624,8 @@ export class TerminalElement extends HTMLElement {
     }
   }
 
-  focusTerminal (double: boolean = false) {
+  async focusTerminal (double: boolean = false) {
+    await this.ready();
     if (!this.terminal || !this.model) return;
     this.model.setActive();
     this.terminal.focus();
