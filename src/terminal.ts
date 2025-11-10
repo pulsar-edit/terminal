@@ -75,6 +75,10 @@ export default class Terminal {
             this.addDefaultPosition()
           );
         },
+        // Close the active terminal.
+        'terminal:close': () => {
+          this.close();
+        },
         'terminal:open-center': () => {
           this.openInCenterOrDock(atom.workspace);
         },
@@ -113,15 +117,10 @@ export default class Terminal {
       }),
       atom.commands.add('pulsar-terminal', {
         'core:copy': (event) => {
-          let element = this.inferTerminalElement(event);
-          if (!element) return;
-          atom.clipboard.write(element.terminal?.getSelection() ?? '');
+          return this.copy(event);
         },
         'core:paste': (event) => {
-          let element = this.inferTerminalElement(event);
-          if (!element) return;
-          let textToPaste = atom.clipboard.read();
-          element.getModel()?.paste(textToPaste);
+          return this.paste(event);
         },
         'terminal:set-selection-as-find-pattern': (event) => {
           let element = this.inferTerminalElement(event);
@@ -132,17 +131,13 @@ export default class Terminal {
           if (!didShow) event.abortKeyBinding();
         },
         'terminal:restart': (event) => {
-          let element = this.inferTerminalElement(event);
-          if (!element) return;
-          element.restartPtyProcess();
+          return this.restart(event);
         },
         'terminal:unfocus': () => {
-          atom.views.getView(atom.workspace).focus();
+          return this.unfocus();
         },
         'terminal:clear': (event) => {
-          let element = this.inferTerminalElement(event);
-          if (!element) return;
-          element.clear();
+          return this.clear();
         },
         'terminal:find': (event) => {
           let element = this.inferTerminalElement(event);
@@ -263,7 +258,14 @@ export default class Terminal {
     this.subscriptions.add(...dockDisposables);
   }
 
-  // Given a command event, determine the
+  static inferTerminalModel (event?: CommandEvent): TerminalModel | undefined {
+    if (!event) {
+      return this.getActiveTerminal();
+    }
+    let element = this.inferTerminalElement(event);
+    return element?.getModel() ?? this.getActiveTerminal();
+  }
+
   static inferTerminalElement (event: CommandEvent): TerminalElement | null {
     if (!event.target || !(event.target instanceof HTMLElement)) return null;
     return event.target.closest('pulsar-terminal') as TerminalElement | null;
@@ -281,12 +283,46 @@ export default class Terminal {
     return await atom.workspace.open(url.href, options) as Promise<TerminalModel>;
   }
 
+  static close () {
+    let active = this.getActiveTerminal();
+    if (!active) return;
+    active.exit();
+  }
+
+  static restart (event?: CommandEvent) {
+    let model = this.inferTerminalModel(event);
+    if (!model) return;
+    model.restartPtyProcess();
+  }
+
+  static copy (event?: CommandEvent) {
+    let model = this.inferTerminalModel(event);
+    if (!model) return;
+    let text = model.getSelection();
+    atom.clipboard.write(text ?? '');
+  }
+
+  static paste (event?: CommandEvent) {
+    let model = this.inferTerminalModel(event);
+    if (!model) return;
+    let textToPaste = atom.clipboard.read();
+    model.paste(textToPaste);
+  }
+
+  static clear (event?: CommandEvent) {
+    let model = this.inferTerminalModel(event);
+    if (!model) return;
+    model.clear();
+  }
+
   /**
    * Service function for opening a terminal.
    */
   static async openTerminal (options: OpenOptions = {}) {
     options = this.addDefaultPosition(options);
-    return await this.open(this.generateUri(), options);
+    let result = await this.open(this.generateUri(), options);
+    result.focusTerminal();
+    return result;
   }
 
   /**
@@ -525,6 +561,10 @@ export default class Terminal {
       prevIndex += list.length;
     }
     list[prevIndex].focusTerminal(true);
+  }
+
+  static unfocus () {
+    atom.views.getView(atom.workspace).focus();
   }
 
   static generateUri() {

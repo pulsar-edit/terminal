@@ -62,9 +62,13 @@ export function getCurrentCwd () {
 }
 
 
-export async function timeout(promise: Promise<unknown>, timeoutMs: number = 5000) {
+export async function timeout(
+  promise: Promise<unknown>,
+  timeoutMs: number = 5000,
+  { tag = '' }: { tag?: string } = {}
+) {
   let rejectPromise = new Promise((_, reject) => {
-    setTimeout(reject, timeoutMs, new Error(`Failed to resolve after ${timeoutMs} milliseconds`));
+    setTimeout(reject, timeoutMs, new Error(`${tag}: Failed to resolve after ${timeoutMs} milliseconds`));
   });
   return Promise.race([promise, rejectPromise]);
 }

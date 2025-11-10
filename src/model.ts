@@ -20,8 +20,10 @@ const DEFAULT_TITLE = 'Terminal';
 
 const ALLOWED_LOCATIONS: PaneItemLocation[]  = ['left', 'right', 'center', 'bottom'];
 
+/**
+ * The representation of a terminal in the Atom workspace.
+ */
 export class TerminalModel {
-
   static is (other: unknown): other is TerminalModel {
     return other instanceof TerminalModel;
   }
@@ -30,34 +32,29 @@ export class TerminalModel {
     return recalculateActive(terminals, active);
   }
 
-  options: TerminalModelOptions;
+  public sessionId: string;
+  public activeIndex: number;
+  public title: string;
+  public initialized: boolean = false;
+  public modified: boolean = false;
   public cwd: string | undefined = undefined;
+  public terminals: TerminalModelOptions['terminals'];
+  public initializedPromise: Promise<void>;
+  public emitter = new Emitter();
+
   private url: URL;
-  terminals: TerminalModelOptions['terminals'];
-  sessionId: string;
-  initializedPromise: Promise<void>;
-  initialized: boolean = false;
-  title?: string;
 
-  activeIndex: number = 0;
-
-  // profile: ProfileData;
-  modified: boolean = false;
-
-  emitter = new Emitter();
-
-  element: TerminalElement | undefined = undefined;
-  pane: Pane | undefined = undefined;
-  dock: Dock | undefined = undefined;
+  public element?: TerminalElement | undefined = undefined;
+  public pane: Pane | undefined = undefined;
+  public dock: Dock | undefined = undefined;
 
   #lastTitle?: string
 
   constructor (options: TerminalModelOptions) {
-    this.options = options;
-    let uri = this.options.uri;
+    let uri = options.uri;
     this.url = new URL(uri);
     this.sessionId = this.url.host;
-    this.terminals = this.options.terminals;
+    this.terminals = options.terminals;
     this.activeIndex = this.terminals.size;
     this.title = DEFAULT_TITLE;
 
@@ -74,63 +71,53 @@ export class TerminalModel {
     return this.url.toString();
   }
 
-  async initialize () {
+  async getInitialCwd () {
     let cwd: string | undefined;
 
+    // First, collect candidates for the `cwd`.
     if (this.cwd) {
+      // This terminal might've been declared with an explicit cwd.
       cwd = this.cwd;
-    } else if (Config.get('terminal.useProjectRootAsCwd')) {
-      let previousActiveItem = atom.workspace.getActivePaneItem() as any;
-      if (typeof previousActiveItem?.getPath === 'function') {
-        cwd = previousActiveItem.getPath();
-        let [dir] = atom.project.relativizePath(cwd ?? '');
-        if (dir) {
-          this.cwd = dir;
-          return;
-        }
-      } else if (typeof previousActiveItem?.selectedPath === 'string') {
-        cwd = previousActiveItem.selectedPath;
-        let [dir] = atom.project.relativizePath(cwd ?? '');
-        if (dir) {
-          this.cwd = dir;
-          return;
-        }
-      } else {
-        cwd = atom.project.getPaths()[0];
-      }
     } else {
-      cwd = Config.get('terminal.cwd');
-    }
-
-    // Now that we have a `cwd`, check if it exists on the filesystem. If it
-    // doesn't, bail!
-    let exists = cwd && await fs.exists(cwd);
-    if (!exists) {
-      this.cwd = Config.get('terminal.cwd');
-      return;
-    }
-
-		// Otherwise, use the path or parent directory as appropriate.
-    if (cwd) {
-      const stats = await fs.stat(cwd);
-      if (stats?.isDirectory()) {
-        this.cwd = cwd ?? null;
-        // this.profile.cwd = (cwd);
-        return;
-  		}
-    }
-
-    if (cwd) {
-      cwd = path.dirname(cwd);
-      let dirStats = await fs.stat(cwd);
-      if (dirStats.isDirectory()) {
-        this.cwd = cwd ?? null;
-        // this.profile.cwd = (cwd);
-        return;
+      // Failing that, we may be in a project, and the user may want us to
+      // consider the project root as the fallback cwd.
+      //
+      // But a project may have multiple roots! So instead of just arbitrarily
+      // selecting the first root, we'll try to privilege the one related to an
+      // active pane item.
+      let previousActiveItem = atom.workspace.getActivePaneItem() as any;
+      cwd = previousActiveItem?.getPath?.() ?? previousActiveItem?.selectedPath;
+      if (cwd) {
+        let [dir] = atom.project.relativizePath(cwd);
+        if (dir) {
+          // We can skip the verification step because we have some strong
+          // indicators that this path truly does exist on the filesystem.
+          return dir;
+        }
       }
     }
 
-    this.cwd = cwd ?? undefined;
+    try {
+      if (cwd) {
+        // If we get this far, we think we have a valid cwd, but we should make
+        // sure it exists on the filesystem.
+        let stats = await fs.stat(cwd);
+        if (stats.isDirectory()) return cwd;
+
+        // Maybe it's the path to a file? Try its parent directory just to be
+        // safe.
+        cwd = path.dirname(cwd);
+        let dirStats = await fs.stat(cwd);
+        if (dirStats.isDirectory()) return cwd;
+      }
+    } catch {
+      // Fail silently.
+    }
+
+    // We've struck out. Fall back to the first project root.
+    cwd = atom.project.getPaths()[0];
+
+
     if (cwd) {
       // TODO: Ideally, we'd be able to keep `cwd` up to date even when it's
       // changed via `cd` and other commands. VS Code can only do this by
@@ -143,7 +130,14 @@ export class TerminalModel {
       // if a pane were split.
       this.url.searchParams.set('cwd', cwd);
     }
+
+    return cwd;
   }
+
+  async initialize () {
+    this.cwd = await this.getInitialCwd();
+  }
+
   serialize () {
     return {
       deserializer: 'TerminalModel',
@@ -162,8 +156,16 @@ export class TerminalModel {
     return `${prefix}${this.title}`;
   }
 
+  getElement () {
+    return this.element!;
+  }
+
   getPath () {
     return this.cwd ?? getCurrentCwd();
+  }
+
+  getURI () {
+    return this.uri;
   }
 
   getAllowedLocations() {
@@ -185,8 +187,17 @@ export class TerminalModel {
     return 'terminal';
   }
 
+  // A “modified” buffer has a dot on the tab bar instead of the close icon.
+  // But this isn't coupled to the underlying modified state of the document!
+  // In our case, we can repurpose this indicator to mean ”output you haven't
+  // yet seen” without having to (for instance) prompt the user to save if they
+  // close the terminal without looking at that output.
   isModified () {
     return this.modified;
+  }
+
+  setElement (element: TerminalElement | undefined) {
+    this.element = element ?? undefined;
   }
 
   onDidChangeTitle (callback: (newTitle: string) => unknown) {
@@ -199,13 +210,15 @@ export class TerminalModel {
 
   handleNewData () {
     this.pane ??= atom.workspace.paneForItem(this) ?? undefined;
-    let oldIsModified = this.modified;
 
+    let oldIsModified = this.modified;
     let item: PaneItem | undefined = undefined;
     if (this.pane) {
       item = this.pane.getActiveItem();
     }
+    // When this pane isn't the active item, set `modified` to `true`.
     this.modified = item !== (this as unknown);
+
     if (oldIsModified !== this.modified) {
       this.emitter.emit('did-change-modified', this.modified);
     }
@@ -213,6 +226,7 @@ export class TerminalModel {
     if (this.title !== this.#lastTitle) {
       this.emitter.emit('did-change-title', this.getTitle());
     }
+
     this.#lastTitle = this.title;
   }
 
@@ -227,10 +241,6 @@ export class TerminalModel {
     if (!this.dock) return true;
     if (this.dock.isVisible()) return true;
     return false;
-  }
-
-  setElement (element: TerminalElement | undefined) {
-    this.element = element ?? undefined;
   }
 
   moveToPane (pane: Pane) {
@@ -265,11 +275,7 @@ export class TerminalModel {
   }
 
   getSessionId () {
-    return this.url.host;
-  }
-
-  getSessionParameters () {
-    return '';
+    return this.sessionId;
   }
 
   refitTerminal () {
@@ -277,8 +283,9 @@ export class TerminalModel {
   }
 
   focusTerminal (double: boolean = false) {
+    if (!this.element) return;
     this.pane?.activateItem(this);
-    this.element?.focusTerminal(double);
+    this.element.focusTerminal(double);
     if (this.modified) {
       this.modified = false;
       this.emitter.emit('did-change-modified', this.modified);
@@ -311,34 +318,42 @@ export class TerminalModel {
     });
   }
 
-  copyFromTerminal () {
-    return this.element?.terminal?.getSelection();
+  getSelection () {
+    let selection = this.element?.terminal?.getSelection();
+    return selection;
   }
 
+  /** Write text into the terminal. */
   paste (text: string) {
     this.element?.pty?.write(text);
   }
 
+  /**
+   * Run a command.
+   *
+   * Like `paste`, except it inserts a carriage return at the end of the input.
+   */
   run (command: string) {
     this.element?.pty?.write(command + os.EOL.charAt(0));
   }
 
+  /** Clear the screen. */
   clear () {
     this.element?.clear();
   }
 
+  /** Make this terminal the active terminal. */
   setActive () {
     recalculateActive(this.terminals, this);
   }
 
-  getElement () {
-    return this.element!;
-  }
-
+  /** Recalculate the theme colors and font metadata. */
   updateTheme () {
     this.element?.updateTheme();
   }
 
+  // Set a new `activeIndex` for this terminal. Don't use this; it's for
+  // `recalculateActive`.
   setIndex (newIndex: number) {
     this.activeIndex = newIndex;
     this.emitter.emit('did-change-title', this.getTitle());
