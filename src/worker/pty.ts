@@ -105,7 +105,11 @@ async function processMessage (data: PtyMessage) {
       let argsDebug = Array.isArray(data.payload.args) ?
         data.payload.args.join(', ') : data.payload.args;
       log(`Spawning PTY with file: ${data.payload.file} and args: ${argsDebug}`)
-      await spawnPty(data.payload.file, data.payload.args, data.payload.options);
+      try {
+        await spawnPty(data.payload.file, data.payload.args, data.payload.options);
+      } catch (error) {
+        emitError(error);
+      }
       break;
     case 'kill':
       if (!currentPty) return;
