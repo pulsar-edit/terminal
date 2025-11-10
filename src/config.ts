@@ -189,20 +189,6 @@ export function getConfigSchema () {
           default: process.env.TERM || 'xterm-256color',
           order: 3
         },
-        cwd: {
-          title: 'Working Directory',
-          description: 'The working directory to use when launching a terminal.',
-          type: 'string',
-          default: defaultCwd,
-          order: 4
-        },
-        useProjectRootAsCwd: {
-          title: 'Use Project Root as Working Directory',
-          description: 'Overrides the setting above when working in a project.',
-          type: 'boolean',
-          default: true,
-          order: 5
-        },
         encoding: {
           title: 'Character Encoding',
           description: 'The encoding to use in a spawned terminal.',
@@ -308,7 +294,7 @@ export function getConfigSchema () {
           title: 'Line Height',
           description: 'Multiplier to control space between lines.',
           type: 'number',
-          default: 1.5,
+          default: 1.3,
           minimum: 1,
           maximum: 2,
           order: 4
@@ -318,11 +304,11 @@ export function getConfigSchema () {
           description: 'When enabled, terminals will always use the line height specified in the Editor settings instead of the value above.',
           order: 5,
           type: 'boolean',
-          default: true
+          default: false
         },
         theme: {
           title: 'Color Theme',
-          description: 'Which set of colors to use in the terminal. Can be one of the preset themes; **Stylesheet** which lets you (or a theme) specify terminal colors in a stylesheet; or **Custom**, which prefers the values specified in the section below. (Expand the **Custom Theme Colors** heading to modify them.)',
+          description: 'Which set of colors to use in the terminal.  **Stylesheet** which lets you (or a theme) specify terminal colors in a stylesheet; **Custom**, which prefers the values specified in the section below; or one of the legacy preset themes.\n\nIf you choose **Custom**, expand the **Custom Theme Colors** heading to modify individual colors.',
           type: 'string',
           enum: [
             {
@@ -374,6 +360,7 @@ export function getConfigSchema () {
     },
     behavior: {
       title: 'Behavior',
+      description: 'How Pulsar manages terminal pane items within the workspace.',
       type: 'object',
       order: 3,
       properties: {
@@ -383,13 +370,13 @@ export function getConfigSchema () {
           type: 'string',
           enum: [
             'Center',
+            'Bottom Dock',
+            'Left Dock',
+            'Right Dock',
             'Split Up',
             'Split Down',
             'Split Left',
-            'Split Right',
-            'Bottom Dock',
-            'Left Dock',
-            'Right Dock'
+            'Split Right'
           ],
           default: 'Center',
           order: 0
@@ -403,7 +390,7 @@ export function getConfigSchema () {
         },
         activeTerminalLogic: {
           title: 'Active Terminal Logic',
-          description: `How the “active” terminal is determined.`,
+          description: `How the “active” terminal is determined.\n\nMany commands operate on the active terminal. If no terminal fits the selected definition, a new terminal will typically be created.`,
           type: 'string',
           enum: [
             {
@@ -446,6 +433,21 @@ export function getConfigSchema () {
           type: 'boolean',
           default: 'false',
           order: 6
+        }
+      }
+    },
+    advanced: {
+      title: 'Advanced',
+      type: 'object',
+      order: 4,
+      collapsed: true,
+      description: 'Uncommon settings.',
+      properties: {
+        enableDebugLogging: {
+          title: 'Enable Debug Logging',
+          description: 'Logs more information from the PTY process to the developer console.\n\nYou may want to enable this if you’re reporting a bug and you’re asked to provide more information. Otherwise, leave it disabled; it’s quite verbose! (Takes effect after a terminal is restarted.)',
+          type: 'boolean',
+          default: false
         }
       }
     }
