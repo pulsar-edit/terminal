@@ -1,5 +1,12 @@
 
-import { CommandEvent, CompositeDisposable, Pane, TextEditorElement, WorkspaceOpenOptions } from  'atom';
+import {
+  CommandEvent,
+  CompositeDisposable,
+  Disposable,
+  Pane,
+  TextEditorElement,
+  WorkspaceOpenOptions
+} from  'atom';
 import { Config, getConfigSchema } from './config';
 import { TerminalElement } from './element';
 import { TerminalModel } from './model';
@@ -137,7 +144,7 @@ export default class Terminal {
           return this.unfocus();
         },
         'terminal:clear': (event) => {
-          return this.clear();
+          return this.clear(event);
         },
         'terminal:find': (event) => {
           let element = this.inferTerminalElement(event);
@@ -325,13 +332,72 @@ export default class Terminal {
     return result;
   }
 
+  static async canRunCommands (commands: string[]) {
+    let serializedCommands = JSON.stringify(commands);
+    if ((Config.get('advanced.allowedCommands') ?? []).includes(serializedCommands)) {
+      return true;
+    }
+    let disposable: Disposable | undefined = undefined;
+    return new Promise((resolve) => {
+      let notification = atom.notifications.addInfo('Terminal: Approve commands', {
+        description: `A package wants to run the command(s) above. If this is OK, click **Allow Once**. You may also choose **Allow Always** to remember your approval for this specific list of commands.`,
+        detail: commands.join('\n'),
+        dismissable: true,
+        buttons: [
+          {
+            text: 'Refuse',
+            onDidClick () {
+              disposable?.dispose();
+              notification.dismiss();
+              resolve(false);
+            }
+          },
+          {
+            text: 'Allow Once',
+            onDidClick () {
+              disposable?.dispose();
+              notification.dismiss();
+              resolve(true);
+            }
+          },
+          {
+            text: 'Allow Always',
+            onDidClick () {
+              disposable?.dispose();
+              let allowedCommands = Config.get('advanced.allowedCommands') ?? [];
+              console.log('Adding:', serializedCommands);
+              Config.set('advanced.allowedCommands', [...allowedCommands, serializedCommands]);
+              notification.dismiss();
+              resolve(true);
+            }
+          }
+        ]
+      });
+
+      // If the user dismisses the notification via the close icon, it'll be
+      // treated the same as if they'd clicked “Refuse.”
+      //
+      // If one of the other buttons is clicked first, in theory this
+      // disposable will be disposed of before it can execute.
+      disposable = notification.onDidDismiss(() => {
+        disposable?.dispose();
+        resolve(false);
+      });
+    });
+  }
+
   /**
    * Service function which opens a terminal and runs the given commands.
    *
    * Configuration determines whether a new terminal is opened or an existing
    * terminal is reused.
+   *
+   * Returns a boolean indicating whether the commands actually ran. There are
+   * several reasons why the commands might not run, including: (a) the
+   * terminal wasn’t yet active, and (b) the user might not have approved the
+   * requested commands.
    */
-  static async runCommands (commands: string[]) {
+  static async runCommands (commands: string[]): Promise<boolean> {
     let terminal;
     if (Config.get('behavior.runInActive')) {
       terminal = this.getActiveTerminal();
@@ -339,12 +405,17 @@ export default class Terminal {
     if (!terminal) {
       terminal = await this.open(this.generateUri(), this.addDefaultPosition());
     }
-    if (!terminal.element) return;
+    if (!terminal.element) return false;
     await terminal.element.ready();
+
+    if (!(await this.canRunCommands(commands))) {
+      return false;
+    }
 
     for (let command of commands) {
       terminal.run(command);
     }
+    return true;
   }
 
   static async openInCenterOrDock (

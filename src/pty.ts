@@ -229,16 +229,13 @@ export class Pty {
 
     let bootedPromise = this.booted();
 
-    console.log('PTY', this.id, 'waiting for boot…', performance.now());
     await timeout(bootedPromise, 5000, { tag: 'Booted' });
-    console.log('…booted!', this.id, performance.now());
     if (this.destroyed) return;
 
     if (!this.process.stdin) {
       let error = new Error('Failed to spawn PTY');
       this.emitError(error);
     }
-    console.log('ABOUT TO SPAWN FOR PTY', this.id);
 
     // If we get this far, the PTY is ready to receive the initial command.
     let spawnMessage: PtyMessage = {
@@ -246,7 +243,6 @@ export class Pty {
       payload: this.options
     };
     this.#sendMessage(spawnMessage);
-    console.log('PTY', this.id, 'sent message');
 
     let firstDataPromise = this.ready();
 
@@ -271,7 +267,6 @@ export class Pty {
   }
 
   kill (signal?: string) {
-    console.log('Killing PTY', this.id);
     if (isWindows()) {
       this.#killOnWindows();
     } else {

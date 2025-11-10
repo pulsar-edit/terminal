@@ -1,4 +1,11 @@
-import { Dock, Emitter, Pane, PaneItem, PaneItemLocation } from "atom";
+import {
+  Disposable,
+  Dock,
+  Emitter,
+  Pane,
+  PaneItem,
+  PaneItemLocation
+} from "atom";
 import { TerminalElement } from "./element";
 
 import path from 'path';
@@ -8,7 +15,7 @@ import { URL } from 'url';
 import os from 'os';
 
 import fs from 'fs-extra';
-import { generateUri, getCurrentCwd, recalculateActive } from "./utils";
+import { generateUri, getCurrentCwd, recalculateActive, timeout } from "./utils";
 import { Config } from "./config";
 
 export type TerminalModelOptions = {
@@ -198,6 +205,7 @@ export class TerminalModel {
 
   setElement (element: TerminalElement | undefined) {
     this.element = element ?? undefined;
+    this.emitter.emit('did-create-element', element);
   }
 
   onDidChangeTitle (callback: (newTitle: string) => unknown) {
@@ -243,6 +251,22 @@ export class TerminalModel {
     return false;
   }
 
+  onDidCreateElement(callback: (element: TerminalElement) => unknown) {
+    return this.emitter.on('did-create-element', callback);
+  }
+
+  async waitForElement (timeoutMs: number = 2000) {
+    if (this.element) return Promise.resolve(this.element);
+    let promise = new Promise((resolve) => {
+      let disposable: Disposable | undefined = undefined;
+      disposable = this.onDidCreateElement((elem) => {
+        resolve(elem);
+        disposable?.dispose();
+      });
+    });
+    return await timeout(promise, timeoutMs);
+  }
+
   moveToPane (pane: Pane) {
     this.pane = pane;
     // @ts-ignore TODO: Update @pulsar-edit/types.
@@ -282,10 +306,16 @@ export class TerminalModel {
     this.element?.refitTerminal();
   }
 
-  focusTerminal (double: boolean = false) {
-    if (!this.element) return;
+  async focusTerminal (double: boolean = false) {
     this.pane?.activateItem(this);
-    this.element.focusTerminal(double);
+    if (!this.element) {
+      try {
+        await this.waitForElement();
+      } catch {
+        return;
+      }
+    }
+    this.element!.focusTerminal(double);
     if (this.modified) {
       this.modified = false;
       this.emitter.emit('did-change-modified', this.modified);

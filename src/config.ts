@@ -130,7 +130,8 @@ export class Config {
     return atom.config.get(keyPath);
   }
   static set<T extends unknown = unknown>(keyName: string, value: T) {
-    return atom.config.set(keyName, value);
+    let keyPath = `${PACKAGE_NAME}.${keyName}`;
+    return atom.config.set(keyPath, value);
   }
 }
 
@@ -139,7 +140,7 @@ export function getConfigSchema () {
     (process.env.COMSPEC || 'cmd.exe') :
     (process.env.SHELL || '/bin/sh');
 
-  let defaultCwd = isWindows() ? process.env.USERPROFILE : process.env.HOME;
+  // let defaultCwd = isWindows() ? process.env.USERPROFILE : process.env.HOME;
 
   let colorSchemaObject: any = {};
   for (let item of THEME_COLORS) {
@@ -180,6 +181,9 @@ export function getConfigSchema () {
           description: 'Arguments to pass to the initialize command (comma-separated).',
           type: 'array',
           default: [],
+          items: {
+            type: 'string'
+          },
           order: 2
         },
         terminalType: {
@@ -447,7 +451,18 @@ export function getConfigSchema () {
           title: 'Enable Debug Logging',
           description: 'Logs more information from the PTY process to the developer console.\n\nYou may want to enable this if you’re reporting a bug and you’re asked to provide more information. Otherwise, leave it disabled; it’s quite verbose! (Takes effect after a terminal is restarted.)',
           type: 'boolean',
-          default: false
+          default: false,
+          order: 1
+        },
+        allowedCommands: {
+          title: 'Allowed Commands',
+          description: 'Any sets of commands you’ve allowed to run automatically via a terminal service will appear here when you choose **Always Allow**.',
+          type: 'array',
+          default: [],
+          items: {
+            type: 'string'
+          },
+          order: 2
         }
       }
     }

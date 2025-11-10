@@ -586,6 +586,7 @@ export class TerminalElement extends HTMLElement {
           this.div.top.innerHTML = ''; // TODO
         }
         await this.pty.ready();
+        this.refitTerminal();
       }
     } catch (error) {
       // TODO: If there's an error in spawning the PTY, it will likely surface
@@ -607,8 +608,12 @@ export class TerminalElement extends HTMLElement {
   }
 
   refitTerminal () {
-    if (!this.#terminalInitiallyVisible) return;
-    if (!this.#mainContentRect) return;
+    if (!this.#terminalInitiallyVisible) {
+      return;
+    }
+    if (!this.#mainContentRect) {
+      return;
+    }
     if (this.#mainContentRect.height === 0 || this.#mainContentRect.width === 0) {
       return;
     }
@@ -617,11 +622,12 @@ export class TerminalElement extends HTMLElement {
     if (!geometry || !this.isPtyProcessRunning() || !this.pty) {
       return
     }
-    if (this.#ptyMeta.cols !== geometry.cols || this.#ptyMeta.rows !== geometry.rows) {
-      this.pty.resize(geometry.cols, geometry.rows);
-      this.#ptyMeta.cols = geometry.cols;
-      this.#ptyMeta.rows = geometry.rows;
-    }
+    // We originally had this so that a call to `resize` didn't happen unless
+    // the refit resulted in a change in geometry. But we seem to get better
+    // results if we call this method redundantly!
+    this.pty.resize(geometry.cols, geometry.rows);
+    this.#ptyMeta.cols = geometry.cols;
+    this.#ptyMeta.rows = geometry.rows;
   }
 
   async focusTerminal (double: boolean = false) {
