@@ -346,6 +346,7 @@ export default class Terminal {
         buttons: [
           {
             text: 'Refuse',
+            className: 'btn-error',
             onDidClick () {
               disposable?.dispose();
               notification.dismiss();
