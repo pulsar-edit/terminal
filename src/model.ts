@@ -290,14 +290,6 @@ export class TerminalModel {
     return await this.initializedPromise;
   }
 
-  getProfile () {
-    return {} // TODO
-  }
-
-  applyProfileChanges (_profileChanges: unknown) {
-    // TODO
-  }
-
   getSessionId () {
     return this.sessionId;
   }
@@ -356,6 +348,11 @@ export class TerminalModel {
   /** Write text into the terminal. */
   paste (text: string) {
     this.element?.pty?.write(text);
+  }
+
+  /** Select all text in the terminal. */
+  selectAll () {
+    this.element?.selectAll();
   }
 
   /**

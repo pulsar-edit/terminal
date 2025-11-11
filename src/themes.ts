@@ -5,7 +5,7 @@ import { Color } from "atom";
 
 export function getTheme (): ITheme {
   let theme = Config.get('appearance.theme');
-  let customThemeColors: ITheme = Config.get('appearance.customThemeColors');
+  let customThemeColors: ITheme = Config.get('appearance.customThemeColors') ?? {};
 
   // Start with the custom colors as a base. Some of these hard-coded themes
   // will override the custom colors and others won't.
@@ -236,7 +236,7 @@ export function getSearchTheme(): ISearchDecorationOptions {
 
     foreground,
     background
-  } = Config.get('appearance.customThemeColors');
+  } = Config.get('appearance.customThemeColors') ?? {};
 
   // Start with the custom colors as a base. Some of the options below will
   // override the custom colors and others won't.

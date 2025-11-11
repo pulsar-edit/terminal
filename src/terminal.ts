@@ -129,6 +129,9 @@ export default class Terminal {
         'core:paste': (event) => {
           return this.paste(event);
         },
+        'core:select-all': (event) => {
+          return this.selectAll(event);
+        },
         'terminal:set-selection-as-find-pattern': (event) => {
           let element = this.inferTerminalElement(event);
           if (!element || !element.terminal) return;
@@ -322,6 +325,12 @@ export default class Terminal {
     if (!model) return;
     let textToPaste = atom.clipboard.read();
     model.paste(textToPaste);
+  }
+
+  static selectAll (event?: CommandEvent) {
+    let model = this.inferTerminalModel(event);
+    if (!model) return;
+    model.selectAll();
   }
 
   static clear (event?: CommandEvent) {
