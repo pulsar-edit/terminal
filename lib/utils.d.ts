@@ -2,6 +2,8 @@ import { TerminalModel } from "./model";
 export declare function isWindows(): boolean;
 export declare function isMac(): boolean;
 export declare function isLinux(): boolean;
+export declare function willUseConPTY(): boolean;
+export declare function windowsBuildNumber(): number | undefined;
 export declare const BASE_URI = "terminal://";
 export declare const PACKAGE_NAME = "terminal";
 export declare function withResolvers<T extends unknown = void>(): {

@@ -3,6 +3,7 @@ import etch from 'etch';
 import { CompositeDisposable, TextEditor } from 'atom';
 import { getSearchTheme } from './themes';
 import { debounce } from './utils';
+import { EtchJSXElement } from '../types/etch/etch-element';
 
 const $ = etch.dom;
 
@@ -167,7 +168,7 @@ export default class FindPalette {
       );
     }
 
-    let resultCountElement = null;
+    let resultCountElement: EtchJSXElement | null = null;
     if (this.resultCount > 0) {
       resultCountElement = $.div(
         { className: 'terminal-find-palette__result-count' },

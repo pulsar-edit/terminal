@@ -4,7 +4,7 @@ import { CompositeDisposable, Disposable } from 'atom';
 import { TerminalModel } from './model';
 import { Config } from './config';
 
-import { ITheme, Terminal as XTerminal } from '@xterm/xterm';
+import { ITerminalOptions, ITheme, Terminal as XTerminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { WebglAddon } from '@xterm/addon-webgl';
@@ -16,7 +16,12 @@ import FindPalette from './find-palette';
 import { Pty } from './pty';
 import { IPtyForkOptions, IWindowsPtyForkOptions } from 'node-pty';
 
-import { debounce, isWindows } from './utils';
+import {
+  debounce,
+  isWindows,
+  willUseConPTY,
+  windowsBuildNumber
+} from './utils';
 import { getTheme } from './themes';
 
 // TODO: Right now we're using `@electron/remote` as an explicit dependency;
@@ -291,21 +296,13 @@ export class TerminalElement extends HTMLElement {
     return Config.get('behavior.leaveOpenAfterExit');
   }
 
-  shouldPromptToStartup () {
-    if (!Config.get('behavior.promptOnStartup')) return false;
-
-    // TODO: Still don't prompt for user-initiated actions. Requires that we
-    // distinguish cases when a service spawns a terminal.
-    return true;
-  }
-
   isPtyProcessRunning () {
     return this.pty && this.#ptyMeta?.running;
   }
 
   getXtermOptions () {
     let extraXtermOptions = Config.get('xterm.additionalOptions') ?? {};
-    let xtermOptions = {
+    let xtermOptions: ITerminalOptions = {
       cursorBlink: true,
       ...extraXtermOptions
     };
@@ -319,9 +316,18 @@ export class TerminalElement extends HTMLElement {
     xtermOptions.fontFamily = atom.config.get(fontFamilyKey);
     xtermOptions.fontSize = atom.config.get(fontSizeKey);
     let originalLineHeight = atom.config.get(lineHeightKey);
-    let adjustedLineHeight = clampLineHeight(originalLineHeight, xtermOptions.fontSize);
-    xtermOptions.lineHeight = adjustedLineHeight;
+    if (xtermOptions.fontSize) {
+      let adjustedLineHeight = clampLineHeight(originalLineHeight, xtermOptions.fontSize);
+      xtermOptions.lineHeight = adjustedLineHeight;
+    }
     xtermOptions.theme = getTheme();
+
+    if (isWindows()) {
+      xtermOptions.windowsPty = {
+        backend: willUseConPTY() ? 'conpty' : 'winpty',
+        buildNumber: windowsBuildNumber()
+      };
+    }
 
     return structuredClone(xtermOptions);
   }
@@ -379,13 +385,13 @@ export class TerminalElement extends HTMLElement {
         if (this.isPtyProcessRunning()) {
           this.pty!.write(data);
         }
-      })
-    );
+      }),
 
-    this.subscriptions.add(
+      // When the user selects text, we might want to automatically copy it to
+      // the clipboard.
       this.terminal.onSelectionChange(() => {
         if (!this.terminal) return;
-        if (!Config.get('behavior.copyOnSelect')) return;
+        if (!Config.get('behavior.copyTextOnSelect')) return;
 
         let text = this.terminal.getSelection();
         if (!text) return;
@@ -397,11 +403,7 @@ export class TerminalElement extends HTMLElement {
       })
     );
 
-    if (this.shouldPromptToStartup()) {
-      this.promptToStartup();
-    } else {
-      await this.restartPtyProcess();
-    }
+    await this.restartPtyProcess();
   }
 
   updateTheme () {

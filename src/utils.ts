@@ -1,3 +1,5 @@
+import * as os from 'os';
+
 import { Config } from "./config";
 import { TerminalModel } from "./model";
 
@@ -11,6 +13,20 @@ export function isMac () {
 
 export function isLinux () {
   return process.platform === 'linux';
+}
+
+export function willUseConPTY () {
+  // According to `node-pty`’s documentation, ConPTY will be used when the user
+  // is on Windows 10 (1809) or greater, which corresponds to build 17763.
+  if (!isWindows()) return false;
+  return (windowsBuildNumber() ?? 0) >= 17763;
+}
+
+export function windowsBuildNumber (): number | undefined {
+  if (!isWindows()) return undefined;
+  let versionSegments = os.release().split('.');
+  let buildNumber = parseInt(versionSegments[versionSegments.length - 1], 10);
+  return buildNumber;
 }
 
 export const BASE_URI = `terminal://`;

@@ -1,5 +1,5 @@
 import { TerminalModel } from './model';
-import { ITheme, Terminal as XTerminal } from '@xterm/xterm';
+import { ITerminalOptions, ITheme, Terminal as XTerminal } from '@xterm/xterm';
 import { Pty } from './pty';
 export declare class TerminalElement extends HTMLElement {
     #private;
@@ -24,9 +24,8 @@ export declare class TerminalElement extends HTMLElement {
     getEnv(): Record<string, string>;
     getEncoding(): any;
     leaveOpenAfterExit(): any;
-    shouldPromptToStartup(): boolean;
     isPtyProcessRunning(): boolean | undefined;
-    getXtermOptions(): any;
+    getXtermOptions(): ITerminalOptions;
     setMainBackgroundColor(theme?: ITheme): void;
     createTerminal(): Promise<void>;
     updateTheme(): void;

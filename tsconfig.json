@@ -13,11 +13,10 @@
     "resolveJsonModule": true,
     "sourceMap": true,
     "moduleResolution": "bundler",
-    "typeRoots": [
-      "./types",
-      "./node_modules/@types"
-    ]
+    "paths": {
+      "etch": ["./types/etch"]
+    }
   },
-  "include": ["src/**/*", "types/**/*"],
-  "exclude": ["node_modules", "lib"]
+  "include": ["./src/**/*", "./types/**/*"],
+  "exclude": ["lib"]
 }

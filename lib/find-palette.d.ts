@@ -1,5 +1,6 @@
 import type { ISearchDecorationOptions, SearchAddon } from '@xterm/addon-search';
 import { TextEditor } from 'atom';
+import { EtchJSXElement } from '../types/etch/etch-element';
 type FindPaletteProperties = {
     term: string;
     visible: boolean;
@@ -29,9 +30,9 @@ export default class FindPalette {
     toggle(): Promise<void>;
     findNext(): false | undefined;
     findPrevious(): false | undefined;
-    update({ term, visible, resultCount, resultIndex }: Partial<FindPaletteProperties>): Promise<any>;
+    update({ term, visible, resultCount, resultIndex }: Partial<FindPaletteProperties>): Promise<void>;
     destroy(): void;
     readAfterUpdate(): void;
-    render(): any;
+    render(): EtchJSXElement;
 }
 export {};

@@ -192,13 +192,6 @@ export declare function getConfigSchema(): {
                 default: string;
                 order: number;
             };
-            promptOnStartup: {
-                title: string;
-                description: string;
-                type: string;
-                default: boolean;
-                order: number;
-            };
             activeTerminalLogic: {
                 title: string;
                 description: string;
