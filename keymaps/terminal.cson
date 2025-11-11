@@ -32,10 +32,9 @@
   "cmd-g": "terminal:find-next"
   "cmd-shift-g": "terminal:find-previous"
   "cmd-e": "terminal:set-selection-as-find-pattern"
-  # Ordinarily we'd bind an unfocus command to Esc — but when the terminal is
-  # focused, single keystrokes like Esc will be swallowed by XTerm. So we add a
-  # modifier key.
-  "cmd-esc": "terminal:unfocus"
+  # Ordinarily we'd bind an unfocus command to Esc — but Esc in particular
+  # seems to stubbornly be claimed by Xterm, even if modifier keys are present!
+  "cmd-alt-~ u": "terminal:unfocus"
 
 ".platform-darwin .terminal-find-palette atom-text-editor":
   # Ensure these shortcuts work equally well whether the terminal or the "find"
@@ -75,10 +74,9 @@
   "f3": "terminal:find-next"
   "shift-f3": "terminal:find-previous"
   "ctrl-e": "terminal:use-selection-as-find-pattern"
-  # Ordinarily we'd bind an unfocus command to Esc — but when the terminal is
-  # focused, single keystrokes like Esc will be swallowed by XTerm. So we add a
-  # modifier key.
-  "ctrl-esc": "terminal:unfocus"
+  # Ordinarily we'd bind an unfocus command to Esc — but Esc in particular
+  # seems to stubbornly be claimed by Xterm, even if modifier keys are present!
+  "ctrl-~ u": "terminal:unfocus"
 
 ".platform-win32 .terminal-find-palette atom-text-editor, .platform-linux .terminal-find-palette atom-text-editor":
   # Ensure these shortcuts work equally well whether the terminal or the "find"

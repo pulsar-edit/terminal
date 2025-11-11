@@ -1,6 +1,11 @@
+MIT License
+pulsar-edit/terminal
 Copyright (c) 2025 Pulsar-Edit
 
-Based on:
+BASED ON:
+
+atom-community/terminal (atomic-terminal)
+Copyright (c) 2020 atom-community. All Rights Reserved.
 
 x-terminal
 Copyright (c) 2020 UziTech All Rights Reserved.

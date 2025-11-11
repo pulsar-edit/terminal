@@ -230,7 +230,8 @@ export default class Terminal {
         },
         "terminal:open-split-right-dock-context-menu": {
           hiddenInCommandPalette: true,
-          didDispatch: ({ target }) => { this.openInCenterOrDock(atom.workspace.getRightDock(), { target });
+          didDispatch: ({ target }) => {
+            this.openInCenterOrDock(atom.workspace.getRightDock(), { target });
           }
         },
       })
@@ -239,9 +240,16 @@ export default class Terminal {
     let debouncedUpdateTheme = debounce(() => this.updateTheme());
 
     this.subscriptions.add(
-      // Immediately apply new theme colors.
+      // Immediately apply new theme colors if anything changes in the
+      // "appearance" section.
       atom.config.onDidChange('terminal.appearance', debouncedUpdateTheme),
-      atom.themes.onDidChangeActiveThemes(debouncedUpdateTheme)
+      // Immediately apply new theme colors if the user changes their syntax or
+      // UI theme.
+      atom.themes.onDidChangeActiveThemes(debouncedUpdateTheme),
+      // This should catch any changes to the user’s `styles.less`. (Strangely,
+      // when the user edits their `styles.less`, it's removed and re-added
+      // rather than updated, it would seem.)
+      atom.styles.onDidAddStyleElement(debouncedUpdateTheme)
     );
 
     let docks = [

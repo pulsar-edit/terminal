@@ -20,6 +20,7 @@ export default class FindPalette {
     };
     private observedEditors;
     private subscriptions;
+    private searchTheme;
     getDecorationsOptions(): ISearchDecorationOptions;
     constructor(searchAddon: SearchAddon);
     search(term: string): void;

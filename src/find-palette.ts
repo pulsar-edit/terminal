@@ -1,6 +1,8 @@
 import type { ISearchDecorationOptions, SearchAddon } from '@xterm/addon-search';
 import etch from 'etch';
 import { CompositeDisposable, TextEditor } from 'atom';
+import { getSearchTheme } from './themes';
+import { debounce } from './utils';
 
 const $ = etch.dom;
 
@@ -28,11 +30,13 @@ export default class FindPalette {
   private observedEditors: WeakSet<TextEditor> = new WeakSet();
   private subscriptions: CompositeDisposable = new CompositeDisposable();
 
+  private searchTheme: ISearchDecorationOptions;
+
   getDecorationsOptions () {
     let root = getComputedStyle(document.documentElement);
     let options: ISearchDecorationOptions = {
-      // TODO: These are required in the decorations object (typedef bug?) but
-      // we aren't using them, so we're specifying transparent color values.
+      // These are required in the decorations object (typedef bug?) but we
+      // aren't using them, so we're specifying transparent color values.
       matchOverviewRuler: `#00000000`,
       activeMatchColorOverviewRuler: `#00000000`,
 
@@ -57,10 +61,24 @@ export default class FindPalette {
         resultCount: event.resultCount
       });
     });
+
+    let debouncedUpdateSearchTheme = debounce(
+      () => this.searchTheme = getSearchTheme()
+    );
+
+    // Cache the theme colors that relate to the find palette…
+    this.searchTheme = getSearchTheme();
+
+    // …but invalidate the cache whenever the settings change.
+    this.subscriptions.add(
+      atom.config.onDidChange('terminal.appearance', debouncedUpdateSearchTheme),
+      atom.themes.onDidChangeActiveThemes(debouncedUpdateSearchTheme),
+      atom.styles.onDidAddStyleElement(debouncedUpdateSearchTheme)
+    );
   }
 
   search (term: string) {
-    this.searchAddon.findNext(term, { decorations: this.getDecorationsOptions() });
+    this.searchAddon.findNext(term, { decorations: this.searchTheme });
     let text = this.refs.search.getText();
     if (text !== term) {
       this.refs.search.setText(term);
@@ -90,13 +108,13 @@ export default class FindPalette {
   findNext () {
     if (this.resultCount === 0) return false;
     if (!this.term) return false;
-    this.searchAddon.findNext(this.term, { decorations: this.getDecorationsOptions() });
+    this.searchAddon.findNext(this.term, { decorations: this.searchTheme });
   }
 
   findPrevious () {
     if (this.resultCount === 0) return false;
     if (!this.term) return false;
-    this.searchAddon.findPrevious(this.term, { decorations: this.getDecorationsOptions() });
+    this.searchAddon.findPrevious(this.term, { decorations: this.searchTheme });
   }
 
   async update ({ term, visible, resultCount, resultIndex }: Partial<FindPaletteProperties>) {

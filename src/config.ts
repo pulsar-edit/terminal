@@ -1,126 +1,5 @@
 import { PACKAGE_NAME, isWindows } from './utils';
-
-const THEME_COLORS = [
-  {
-    name: 'Text',
-    default: '#ffffff'
-  },
-  {
-    name: 'Background',
-    default: '#000000'
-  },
-  {
-    name: 'Cursor',
-    default: '#ffffff'
-  },
-  {
-    name: 'Cursor Text',
-    short: 'cursorText',
-    default: '#000000'
-  },
-  {
-    name: 'Selection Background',
-    short: 'selectionBackground',
-    default: '#4d4d4d'
-  },
-  {
-    name: 'ANSI Black',
-    short: 'black',
-    description: '`\\x1b[30m`',
-    default: '#2e3436'
-  },
-  {
-    name: 'ANSI Red',
-    short: 'red',
-    description: '`\\x1b[31m`',
-    default: '#cc0000'
-  },
-  {
-    name: 'ANSI Green',
-    short: 'green',
-    description: '`\\x1b[32m`',
-    default: '#4e9a06'
-  },
-  {
-    name: 'ANSI Yellow',
-    short: 'yellow',
-    description: '`\\x1b[33m`',
-    default: '#c4a000'
-  },
-  {
-    name: 'ANSI Blue',
-    short: 'blue',
-    description: '`\\x1b[34m`',
-    default: '#3465a4'
-  },
-  {
-    name: 'ANSI Magenta',
-    short: 'magenta',
-    description: '`\\x1b[35m`',
-    default: '#75507b'
-  },
-  {
-    name: 'ANSI Cyan',
-    short: 'cyan',
-    description: '`\\x1b[36m`',
-    default: '#06989a'
-  },
-  {
-    name: 'ANSI White',
-    short: 'white',
-    description: '`\\x1b[37m`',
-    default: '#d3d7cf'
-  },
-  {
-    name: 'ANSI Bright Black',
-    short: 'brightBlack',
-    description: '`\\x1b[1;30m`',
-    default: '#555753'
-  },
-  {
-    name: 'ANSI Bright Red',
-    short: 'brightRed',
-    description: '`\\x1b[1;31m`',
-    default: '#ef2929'
-  },
-  {
-    name: 'ANSI Bright Green',
-    short: 'brightGreen',
-    description: '`\\x1b[1;32m`',
-    default: '#8ae234'
-  },
-  {
-    name: 'ANSI Bright Yellow',
-    short: 'brightYellow',
-    description: '`\\x1b[1;33m`',
-    default: '#fce94f'
-  },
-  {
-    name: 'ANSI Bright Blue',
-    short: 'brightBlue',
-    description: '`\\x1b[1;34m`',
-    default: '#729fcf'
-  },
-  {
-    name: 'ANSI Bright Magenta',
-    short: 'brightMagenta',
-    description: '`\\x1b[1;35m`',
-    default: '#ad7fa8'
-  },
-  {
-    name: 'ANSI Bright Cyan',
-    short: 'brightCyan',
-    description: '`\\x1b[1;36m`',
-    default: '#34e2e2'
-  },
-  {
-    name: 'ANSI Bright White',
-    short: 'brightWhite',
-    description: '`\\x1b[1;37m`',
-    default: '#eeeeec'
-  }
-];
-
+import { THEME_COLORS } from './themes';
 export class Config {
   static get (keyName?: string) {
     if (!keyName) {
@@ -143,15 +22,16 @@ export function getConfigSchema () {
   // let defaultCwd = isWindows() ? process.env.USERPROFILE : process.env.HOME;
 
   let colorSchemaObject: any = {};
-  for (let item of THEME_COLORS) {
+  for (let [i, item] of THEME_COLORS.entries()) {
     let schema: any = {};
     schema.title = item.name;
     schema.type = 'color';
     schema.default = item.default;
+    schema.order = i;
     if (item.description) {
       schema.description = item.description;
     }
-    let key = schema.short ?? item.name.toLowerCase();
+    let key = item.short ?? item.name.toLowerCase();
     colorSchemaObject[key] = schema;
   }
 
@@ -312,7 +192,7 @@ export function getConfigSchema () {
         },
         theme: {
           title: 'Color Theme',
-          description: 'Which set of colors to use in the terminal.  **Stylesheet** which lets you (or a theme) specify terminal colors in a stylesheet; **Custom**, which prefers the values specified in the section below; or one of the legacy preset themes.\n\nIf you choose **Custom**, expand the **Custom Theme Colors** heading to modify individual colors.',
+          description: 'Which set of colors to use in the terminal.  **Stylesheet** lets you (or a theme) specify terminal colors in a stylesheet; **Custom** prefers the values specified in the section below; and the remaining values are legacy preset themes.\n\nIf you choose **Custom**, expand the **Custom Theme Colors** heading to modify individual colors.',
           type: 'string',
           enum: [
             {
@@ -354,7 +234,7 @@ export function getConfigSchema () {
         },
         customThemeColors: {
           title: 'Custom Theme Colors',
-          description: "Colors to use for a custom terminal theme. These will be ignored unless “Color Theme” above is set to `Config`.",
+          description: "Colors to use for a custom terminal theme. These will be ignored unless “Color Theme” above is set to `Config`.\n\n**All of these values support transparency**, even if you can’t specify it via `settings-view`! Open your `config.cson` to add an alpha channel to any item; specify it using `rgba` syntax (e.g., `rgba(43, 88, 145, 0.5)`).",
           type: 'object',
           order: 7,
           collapsed: true,
