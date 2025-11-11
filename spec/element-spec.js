@@ -190,6 +190,20 @@ describe('TerminalElement', () => {
     });
   });
 
+  describe('getExtraXTermOptions()', () => {
+    it('passes along values defined in the package config', () => {
+      atom.config.set('terminal.xterm.additionalOptions', `{ "foo": false }`);
+      expect(element.getExtraXTermOptions()).toEqual({ foo: false });
+    });
+
+    it('notifies the user when the config field is invalid JSON', () => {
+      spyOn(atom.notifications, 'addError').andCallThrough();
+      atom.config.set('terminal.xterm.additionalOptions', `{ "foo": false`);
+      expect(element.getExtraXTermOptions()).toEqual({});
+      expect(atom.notifications.addError).toHaveBeenCalled();
+    });
+  });
+
   describe('createTerminal() addon', () => {
     const { WebLinksAddon } = require('@xterm/addon-web-links');
     const { WebglAddon } = require('@xterm/addon-webgl');
@@ -269,13 +283,12 @@ describe('TerminalElement', () => {
     xit('handles a nonexistent command', async () => {
       currentReadyIntervalMs = 500;
       spyOn(atom.notifications, 'addError');
-      atom.config.set('terminal.terminal.command', 'somecommand');
+      atom.config.set('terminal.terminal.shell', 'somecommand');
       let restartPromise = element.restartPtyProcess();
       await wait(10);
       try {
         await restartPromise;
       } catch {
-        console.warn('AHA!');
       } finally {
         // Give the element time to act.
         await wait(10);

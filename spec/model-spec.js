@@ -308,7 +308,7 @@ describe('TerminalModel', () => {
     });
   });
 
-  fdescribe('focusTerminal()', () => {
+  describe('focusTerminal()', () => {
     it('calls through to the element', () => {
       model.element = element;
       model.focusTerminal();

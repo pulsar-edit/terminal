@@ -79,8 +79,18 @@ export default [{
   // automatically be treated as external, but you can manually specify any
   // further package you want to make external if you know what you're doing.
   external: [
+    '@electron/remote',
+    '@xterm/addon-web-links',
+    '@xterm/addon-fit',
+    '@xterm/addon-ligatures',
+    '@xterm/addon-search',
+    '@xterm/addon-webgl',
+    '@xterm/xterm',
     'atom',
-    '@electron/remote'
+    'etch',
+    'fs-extra',
+    'ndjson',
+    'which'
   ]
 },
 {
@@ -122,9 +132,7 @@ export default [{
   // automatically be treated as external, but you can manually specify any
   // further package you want to make external if you know what you're doing.
   external: [
-    'atom',
-    '@electron/remote'
+    'ndjson',
+    'node-pty'
   ]
-}
-
-];
+}];

@@ -55,8 +55,6 @@ export declare class TerminalModel {
     waitForElement(timeoutMs?: number): Promise<unknown>;
     moveToPane(pane: Pane): void;
     ready(): Promise<void>;
-    getProfile(): {};
-    applyProfileChanges(_profileChanges: unknown): void;
     getSessionId(): string;
     refitTerminal(): void;
     focusTerminal(double?: boolean): Promise<void>;
@@ -67,6 +65,8 @@ export declare class TerminalModel {
     getSelection(): string | undefined;
     /** Write text into the terminal. */
     paste(text: string): void;
+    /** Select all text in the terminal. */
+    selectAll(): void;
     /**
      * Run a command.
      *

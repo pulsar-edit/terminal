@@ -25,8 +25,10 @@ export declare class TerminalElement extends HTMLElement {
     getEncoding(): any;
     leaveOpenAfterExit(): any;
     isPtyProcessRunning(): boolean | undefined;
+    getExtraXTermOptions(): Partial<ITerminalOptions>;
     getXtermOptions(): ITerminalOptions;
     setMainBackgroundColor(theme?: ITheme): void;
+    optionallyWarnAboutModifierlessClick(): void;
     createTerminal(): Promise<void>;
     updateTheme(): void;
     showFind(prefilledText?: string): boolean;
@@ -43,6 +45,7 @@ export declare class TerminalElement extends HTMLElement {
     clear(): void;
     refitTerminal(): void;
     focusTerminal(double?: boolean): Promise<void>;
+    selectAll(): void;
     hide(): void;
     show(): void;
 }

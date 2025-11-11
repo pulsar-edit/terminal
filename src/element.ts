@@ -4,9 +4,9 @@ import { CompositeDisposable, Disposable } from 'atom';
 import { TerminalModel } from './model';
 import { Config } from './config';
 
-import { ITerminalOptions, ITheme, Terminal as XTerminal } from '@xterm/xterm';
+import { ILinkHandler, ITerminalOptions, ITheme, IViewportRange, Terminal as XTerminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
-import { WebLinksAddon } from '@xterm/addon-web-links';
+import { ILinkProviderOptions, WebLinksAddon } from '@xterm/addon-web-links';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { LigaturesAddon } from '@xterm/addon-ligatures';
 import { SearchAddon } from '@xterm/addon-search';
@@ -18,7 +18,9 @@ import { IPtyForkOptions, IWindowsPtyForkOptions } from 'node-pty';
 
 import {
   debounce,
+  isMac,
   isWindows,
+  PACKAGE_NAME,
   willUseConPTY,
   windowsBuildNumber
 } from './utils';
@@ -101,8 +103,6 @@ export class TerminalElement extends HTMLElement {
     this.appendChild(this.div.top);
     this.appendChild(this.div.palette);
     this.appendChild(this.div.main);
-
-    // TODO: Profile menu.
 
     let initializeResolve: (value: void | PromiseLike<void>) => void;
     let initializeReject: (reason?: any) => void;
@@ -218,7 +218,7 @@ export class TerminalElement extends HTMLElement {
   }
 
   getShellCommand () {
-    return Config.get('terminal.command');
+    return Config.get('terminal.shell');
   }
 
   getArgs () {
@@ -300,11 +300,26 @@ export class TerminalElement extends HTMLElement {
     return this.pty && this.#ptyMeta?.running;
   }
 
+  getExtraXTermOptions () {
+    let rawValue = Config.get('xterm.additionalOptions');
+    let result: Record<string, unknown> = {};
+    if (rawValue) {
+      try {
+        result = JSON.parse(rawValue);
+      } catch (err) {
+        atom.notifications.addError('Terminal: Invalid configuration', {
+          description: `The value of **XTerm Configuration → AdditionalOptions** is not valid JSON.`
+        });
+        result = {};
+      }
+    }
+    return result as Partial<ITerminalOptions>;
+  }
+
   getXtermOptions () {
-    let extraXtermOptions = Config.get('xterm.additionalOptions') ?? {};
     let xtermOptions: ITerminalOptions = {
       cursorBlink: true,
-      ...extraXtermOptions
+      ...this.getExtraXTermOptions()
     };
     let fontFamilyKey = Config.get('appearance.useEditorFontFamily') ?
       'editor.fontFamily' : 'terminal.appearance.fontFamily';
@@ -336,6 +351,25 @@ export class TerminalElement extends HTMLElement {
     this.style.backgroundColor = theme?.background ?? '#000000';
   }
 
+  optionallyWarnAboutModifierlessClick () {
+    if (!Config.get('advanced.warnAboutModifierWhenOpeningUrls')) {
+      return;
+    }
+    Config.set('advanced.warnAboutModifierWhenOpeningUrls', false);
+    atom.notifications.addInfo(`Terminal: Click ignored`, {
+      description: `For security and protection against accidental clicks, you must hold <kbd>${isMac() ? 'Cmd' : 'Ctrl'}</kbd> while clicking URLs. You may disable this requirement in the package settings. (This message will be shown only once.)`,
+      dismissable: true,
+      buttons: [
+        {
+          text: 'Open Terminal Settings',
+          onDidClick () {
+            atom.workspace.open(`atom://config/packages/${PACKAGE_NAME}`);
+          }
+        }
+      ]
+    });
+  }
+
   async createTerminal () {
     this.setMainBackgroundColor();
 
@@ -349,7 +383,18 @@ export class TerminalElement extends HTMLElement {
 
     if (Config.get('xterm.webLinks')) {
       this.terminal.loadAddon(
-        new WebLinksAddon((_, uri) => shell.openExternal(uri))
+        new WebLinksAddon(
+          (event, uri) => {
+            if (Config.get('behavior.requireModifierToOpenUrls')) {
+              let modifier = isMac() ? event.metaKey : event.ctrlKey;
+              if (!modifier) {
+                this.optionallyWarnAboutModifierlessClick();
+                return;
+              }
+            }
+            shell.openExternal(uri);
+          }
+        )
       );
     }
 
@@ -567,7 +612,7 @@ export class TerminalElement extends HTMLElement {
 
         // Handle the PTY exiting on its own, like if the user runs `exit` or
         // `logout`.
-        this.pty.onExit((_exitCode) => {
+        this.pty.onExit((exitCode) => {
           if (!this.terminal || !this.model) {
             throw new Error('No terminal or model for incoming PTY data');
           }
@@ -575,8 +620,7 @@ export class TerminalElement extends HTMLElement {
           if (!this.leaveOpenAfterExit()) {
             this.model.exit();
           } else {
-            // TODO: Show a notification whether successful exit or not? Feels
-            // weird.
+            this.terminal.write(`[Exited with code ${exitCode}]`);
           }
         });
         await this.pty.booted();
@@ -641,6 +685,10 @@ export class TerminalElement extends HTMLElement {
       // Second focus will send command to pty.
       this.terminal.focus();
     }
+  }
+
+  selectAll () {
+    this.terminal?.selectAll();
   }
 
   hide () {

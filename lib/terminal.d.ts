@@ -17,6 +17,7 @@ export default class Terminal {
     static restart(event?: CommandEvent): void;
     static copy(event?: CommandEvent): void;
     static paste(event?: CommandEvent): void;
+    static selectAll(event?: CommandEvent): void;
     static clear(event?: CommandEvent): void;
     /**
      * Service function for opening a terminal.

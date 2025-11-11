@@ -1,5 +1,8 @@
-import { PACKAGE_NAME, isWindows } from './utils';
+import which from 'which';
+
+import { PACKAGE_NAME, isMac, isWindows } from './utils';
 import { THEME_COLORS } from './themes';
+
 export class Config {
   static get (keyName?: string) {
     if (!keyName) {
@@ -14,12 +17,20 @@ export class Config {
   }
 }
 
-export function getConfigSchema () {
-  let defaultTerminalCommand = isWindows() ?
+function getDefaultShell () {
+  // On Windows we read `COMSPEC`, the ancient environment variable that
+  // usually points to `cmd.exe`. But on first run, we will try to opt into
+  // PowerShell if the system appears to have it.
+  //
+  // On Unix systems we'll use the venerable `SHELL` as the source of truth for
+  // your login shell.
+  return isWindows() ?
     (process.env.COMSPEC || 'cmd.exe') :
     (process.env.SHELL || '/bin/sh');
+}
 
-  // let defaultCwd = isWindows() ? process.env.USERPROFILE : process.env.HOME;
+export function getConfigSchema () {
+  let defaultTerminalCommand = getDefaultShell();
 
   let colorSchemaObject: any = {};
   for (let [i, item] of THEME_COLORS.entries()) {
@@ -49,8 +60,8 @@ export function getConfigSchema () {
           default: '⦿ ',
           order: 0
         },
-        command: {
-          title: 'Command',
+        shell: {
+          title: 'Shell',
           description: `Command to run to initialize the shell.`,
           type: 'string',
           default: defaultTerminalCommand,
@@ -58,7 +69,7 @@ export function getConfigSchema () {
         },
         args: {
           title: 'Arguments',
-          description: 'Arguments to pass to the initialize command (comma-separated).',
+          description: 'Arguments to pass to the shell initialization command (comma-separated).',
           type: 'array',
           default: [],
           items: {
@@ -88,7 +99,7 @@ export function getConfigSchema () {
           properties: {
             fallbackEnv: {
               title: 'Fallback',
-              description: `Environment variables that should always be present, even if the environment does not define them. (Accepts a stringified JSON object.)`,
+              description: `Environment variables that should always be present, even if the environment does not define them. If the shell does define these, the shell’s value will take precedence. (Accepts a stringified JSON object.)`,
               type: 'string',
               default: '{}',
               order: 6
@@ -102,7 +113,7 @@ export function getConfigSchema () {
             },
             deleteEnv: {
               title: 'Deleted',
-              description: `Environment variables that should be deleted from a terminal environment whenever present on startup. (Separate multiple entries with commas.)`,
+              description: `Names of environment variables that should be deleted from a terminal environment whenever present on startup. (Separate multiple entries with commas.)`,
               type: 'array',
               default: ['NODE_ENV'],
               order: 8
@@ -113,6 +124,7 @@ export function getConfigSchema () {
     },
     xterm: {
       title: 'XTerm Configuration',
+      description: 'Customize the behavior of XTerm.js.',
       type: 'object',
       order: 1,
       properties: {
@@ -292,7 +304,7 @@ export function getConfigSchema () {
         },
         leaveOpenAfterExit: {
           title: 'Leave Open After Exit',
-          description: 'When enabled, will leave terminals open even after their shells have exited.',
+          description: 'When enabled, will leave terminals open even after their shells have exited. When disabled, terminal pane items will be removed from the workspace immediately upon shell exit.',
           type: 'boolean',
           default: false,
           order: 4
@@ -308,8 +320,15 @@ export function getConfigSchema () {
           title: 'Copy Text on Select',
           description: 'When enabled, terminal text will be copied to the clipboard immediately upon selection.',
           type: 'boolean',
-          default: 'false',
+          default: false,
           order: 6
+        },
+        requireModifierToOpenUrls: {
+          title: 'Require Modifier to Open URLs',
+          description: `When enabled, you must hold down ${isMac() ? '`Cmd`' : '`Ctrl`'} while clicking on a URL in order to open it.`,
+          type: 'boolean',
+          default: true,
+          order: 7
         }
       }
     },
@@ -336,8 +355,36 @@ export function getConfigSchema () {
             type: 'string'
           },
           order: 2
+        },
+        warnAboutModifierWhenOpeningUrls: {
+          title: 'Warn About Modifier When Opening URLs',
+          description: `When enabled _and_ **Require Modifier to Open URLs** is enabled, a user’s initial click on a URL without a modifier key will show a notification explaining why no action was taken. This option is automatically switched to \`false\` after the first display of this notification.`,
+          type: 'boolean',
+          default: true,
+          order: 3
         }
-      }
+      },
     }
   };
+}
+
+async function setAutoShell () {
+  if (!isWindows()) return;
+  // On Windows, automatically prefer PowerShell if we can locate it and the
+  // user hasn't customized it before we can act.
+  if (Config.get('terminal.shell') !== getDefaultShell()) {
+    return;
+  }
+
+  let command = await which('pwsh.exe');
+  command ??= await which('powershell.exe');
+  if (!command) return;
+
+  atom.config.set('terminal.terminal.shell', command);
+}
+
+// On first run on a particular Windows machine, attempt to auto-set the shell.
+if (localStorage.getItem('terminal.autoShellSet') === null) {
+  localStorage.setItem('terminal.autoShellSet', 'true');
+  setAutoShell();
 }

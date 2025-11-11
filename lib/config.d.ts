@@ -16,7 +16,7 @@ export declare function getConfigSchema(): {
                 default: string;
                 order: number;
             };
-            command: {
+            shell: {
                 title: string;
                 description: string;
                 type: string;
@@ -80,6 +80,7 @@ export declare function getConfigSchema(): {
     };
     xterm: {
         title: string;
+        description: string;
         type: string;
         order: number;
         properties: {
@@ -228,7 +229,14 @@ export declare function getConfigSchema(): {
                 title: string;
                 description: string;
                 type: string;
-                default: string;
+                default: boolean;
+                order: number;
+            };
+            requireModifierToOpenUrls: {
+                title: string;
+                description: string;
+                type: string;
+                default: boolean;
                 order: number;
             };
         };
@@ -255,6 +263,13 @@ export declare function getConfigSchema(): {
                 items: {
                     type: string;
                 };
+                order: number;
+            };
+            warnAboutModifierWhenOpeningUrls: {
+                title: string;
+                description: string;
+                type: string;
+                default: boolean;
                 order: number;
             };
         };
