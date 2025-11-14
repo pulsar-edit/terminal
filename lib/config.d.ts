@@ -275,3 +275,4 @@ export declare function getConfigSchema(): {
         };
     };
 };
+export declare function possiblySetAutoShell(): Promise<void>;

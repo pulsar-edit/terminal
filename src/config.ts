@@ -370,21 +370,27 @@ export function getConfigSchema () {
 
 async function setAutoShell () {
   if (!isWindows()) return;
+
   // On Windows, automatically prefer PowerShell if we can locate it and the
   // user hasn't customized it before we can act.
   if (Config.get('terminal.shell') !== getDefaultShell()) {
     return;
   }
 
-  let command = await which('pwsh.exe');
-  command ??= await which('powershell.exe');
+  let command = await which('pwsh.exe', { nothrow: true });
+  command ??= await which('powershell.exe', { nothrow: true });
   if (!command) return;
 
   atom.config.set('terminal.terminal.shell', command);
 }
 
-// On first run on a particular Windows machine, attempt to auto-set the shell.
-if (localStorage.getItem('terminal.autoShellSet') === null) {
+export async function possiblySetAutoShell () {
+  if (localStorage.getItem('terminal.autoShellSet') !== null) {
+    return;
+  }
+  // We set the flag before we even run this logic. This means we'll set it
+  // even if the logic fails/errors, but that's OK; we don't want more than one
+  // bite at the apple.
   localStorage.setItem('terminal.autoShellSet', 'true');
-  setAutoShell();
+  return await setAutoShell();
 }

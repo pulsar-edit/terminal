@@ -7,7 +7,7 @@ import {
   TextEditorElement,
   WorkspaceOpenOptions
 } from  'atom';
-import { Config, getConfigSchema } from './config';
+import { Config, getConfigSchema, possiblySetAutoShell } from './config';
 import { TerminalElement } from './element';
 import { TerminalModel } from './model';
 import { BASE_URI, debounce, recalculateActive, generateUri } from './utils';
@@ -29,6 +29,10 @@ export default class Terminal {
     this.activated = true;
     this.subscriptions = new CompositeDisposable();
     this.terminals = new Set();
+
+    // Attempt to detect the correct shell on Windows, but only if we haven't
+    // done so on a previous activation.
+    possiblySetAutoShell();
 
     this.subscriptions.add(
       // Register a view provider for the terminal emulator.
