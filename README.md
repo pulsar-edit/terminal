@@ -6,7 +6,7 @@ Terminal emulation in Pulsar.
 
 Uses [XTerm](https://xtermjs.org/) and [`node-pty`](https://github.com/microsoft/node-pty).
 
-Inspiration taken from [`x-terminal-reloaded`](https://github.com/Spiker985/x-terminal-reloaded), [`atom-community/terminal`](https://github.com/atom-community/terminal), and all their predecessors.
+Based heavily on [`atomic-terminal`](https://github.com/atom-community/terminal), [`x-terminal-reloaded`](https://github.com/Spiker985/x-terminal-reloaded), and all their predecessors.
 
 ## Commands
 
@@ -139,3 +139,45 @@ Be sure to switch the **Color Theme** setting to **Config** in order for these c
 ### Legacy themes
 
 All other values in the **Color Theme** list are specific terminal themes with hard-coded values. These themes are included because they were present in this package’s predecessors (`x-terminal`, etc.), but they are not comprehensive; most only define foreground and background text colors and otherwise will fall back onto colors specified in the **Custom Theme Colors** section.
+
+## Services
+
+### `terminal` (version 2.0.0)
+
+This package defines a `terminal` service that is a streamlined version of the `terminal` version `1.0.0` service provided by `x-terminal` and `atomic-terminal`, among others.
+
+Rather than serve as a direct copy of the `platformioIDETerminal` service described below, it aims to discard unneeded methods. It uses version `2.0.0` to signify a break in backward compatibility.
+
+It may add methods in the future, but for now it provides an object with two simple methods to its consumers:
+
+#### `open(): Promise<void>`
+
+Opens a new terminal. The user’s configuration determines where that terminal opens in the workspace.
+
+Returns a promise that fulfills once the terminal is created and ready for input.
+
+#### `run(commands: string[]): Promise<boolean>`
+
+Runs the given command or commands in the active terminal. The “active” terminal is whichever one was most recently used. If no terminal is present, one will be created.
+
+By default, the user will be shown the whole list of commands before the terminal spawns, and will be able to approve or reject the request to run the commands.
+
+Also keep in mind that the consuming package isn’t allowed to inspect the output directly. In other words, this method is not a substitute for `child_process.spawn` in the Node standard library.
+
+Returns a promise that resolves to a boolean: `true` if the commands actually ran, and `false` if they did not.
+
+### `platformioIDETerminal` (version 1.1.0)
+
+This service is supported for the sake of compatibility, since it’s arguably the most widely used terminal service. As the name implies, this service was originally created by the `platformio-ide-terminal` package.
+
+The `platformioIDETerminal` service supports both methods defined above, plus:
+
+#### `getTerminalViews(): TerminalModel`
+
+Returns each terminal view currently open in the workspace. Each terminal view is an instance of `TerminalModel` — but it functions like a _view_ model, and implements the [pane item interface](https://github.com/pulsar-edit/types/blob/0099e6b3004de4f94fcdee04b2d86f2910e3abfb/src/pane.d.ts#L88).
+
+Beware, though; this package makes no claim that these instances will share any properties or methods with whatever was returned by `platform-ide-terminal` for this method.
+
+#### updateProcessEnv()
+
+This method is provided so that this package technically conforms to the `platformioIDETerminal` service contract, but it does nothing. (It’s not clear that its original implementation ever did anything useful that couldn’t have been done by setting `process.env` directly.)
