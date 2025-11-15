@@ -10,7 +10,7 @@ import ndjson from 'ndjson';
 import { spawn, SpawnOptionsWithoutStdio, type ChildProcess } from 'child_process';
 
 import { Config } from './config';
-import { isWindows, timeout, withResolvers } from './utils';
+import { isWindows, timeout } from './utils';
 
 const PACKAGE_ROOT = path.normalize(path.join(__dirname, '..'));
 const WORKER_PATH = path.join(PACKAGE_ROOT, 'lib', 'worker', 'pty.js');
@@ -213,13 +213,13 @@ export class Pty {
     this.process.stderr!
       .pipe(ndjson.parse({ strict: false }))
       .on('data', (obj: PtyMessage) => {
-        console.log('GOT STDERR:', obj);
         if (obj.type !== 'stderr') return;
         this.emitter.emit('stderr', obj.payload);
       });
 
     this.process.on('error', (err) => {
       console.error('[Terminal] Error from PTY:', err);
+      // TODO: Notification?
       this.error = true;
       // These will be no-ops if their associated promises have already
       // resolved.
@@ -259,7 +259,6 @@ export class Pty {
     } else if (typeof err === 'string') {
       error = new Error(err);
     } else {
-      console.log('MAKING', err, 'INTO ERROR!');
       error = new Error(`Unknown error`);
     }
     this.emitter.emit('error', error);
