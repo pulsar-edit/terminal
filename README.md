@@ -17,7 +17,7 @@ The simplest command is bound to <kbd>ctrl-\`</kbd> on all platforms: `terminal:
 
 Most of the package’s keybindings rely on a [key sequence](https://docs.pulsar-edit.dev/using-pulsar/basics/#key-sequence): first press the main shortcut (<kbd>ctrl-shift-\`</kbd> on all platforms), then press a second key.
 
-If you want to make any of these commands available via a simpler key binding, you can [customize your keybindings](https://docs.pulsar-edit.dev/customizing-pulsar/customizing-keybindings/).
+If you want to make any of these commands available via a simpler keybinding, you can [customize your keybindings](https://docs.pulsar-edit.dev/customizing-pulsar/customizing-keybindings/).
 
 ### Workspace keybindings
 
@@ -131,7 +131,7 @@ If you prefer, you can eschew the stylesheet approach and define your terminal t
 
 Be sure to switch the **Color Theme** setting to **Config** in order for these colors to be used.
 
-> [!NOTE]
+> [!TIP]
 > As stated in the package settings, all color values support transparency and can accept `rgba()` CSS literal values, even though the color picker in the `settings-view` UI [doesn’t (yet) let you specify an alpha channel](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/input/color#html.elements.input.alpha).
 >
 > To add an alpha channel to any color value, first customize it in the `settings-view` UI (so that the appropriate key is placed in your `config.cson`); then [edit your `config.cson`](https://docs.pulsar-edit.dev/customizing-pulsar/global-configuration-settings/) and drill down from the top-level `terminal:key` to find the value you just customized. Change it to the value you want, then save your `config.cson`.
