@@ -1,26 +1,26 @@
 
 ".platform-darwin atom-workspace":
   # Activate the last active terminal, creating a new one if needed.
-  "cmd-alt-`": "terminal:focus"
+  "ctrl-`": "terminal:focus"
   # Explicitly create a new terminal in the default location.
-  "cmd-alt-~ n": "terminal:open"
+  "ctrl-~ n": "terminal:open"
   # Explicitly create a new terminal in a specific destination.
-  "cmd-alt-~ up": "terminal:open-split-up"
-  "cmd-alt-~ down": "terminal:open-split-down"
-  "cmd-alt-~ left": "terminal:open-split-left"
-  "cmd-alt-~ right": "terminal:open-split-right"
-  "cmd-alt-~ b": "terminal:open-split-bottom-dock"
-  "cmd-alt-~ l": "terminal:open-split-left-dock"
-  "cmd-alt-~ r": "terminal:open-split-right-dock"
+  "ctrl-~ up": "terminal:open-split-up"
+  "ctrl-~ down": "terminal:open-split-down"
+  "ctrl-~ left": "terminal:open-split-left"
+  "ctrl-~ right": "terminal:open-split-right"
+  "ctrl-~ b": "terminal:open-split-bottom-dock"
+  "ctrl-~ l": "terminal:open-split-left-dock"
+  "ctrl-~ r": "terminal:open-split-right-dock"
   # Run the selected text in the active terminal.
-  "cmd-alt-~ x": "terminal:run-selected-text"
+  "ctrl-~ x": "terminal:run-selected-text"
   # Insert the selected text into the active terminal.
-  "cmd-alt-~ i": "terminal:insert-selected-text"
+  "ctrl-~ i": "terminal:insert-selected-text"
 
 ".platform-darwin pulsar-terminal":
   # Cmd-K clears the buffer in Terminal.app and iTerm. That's taken in the
-  # default keymap for workspace-related tasks, so we can't supersede it.
-  # Instead we'll use something close to it.
+  # default keymap for pane management tasks, so we can't supersede it. Instead
+  # we'll use something close to it.
   "cmd-alt-k": "terminal:clear"
   # We can also support the common Ctrl-L shortcut for the same thing.
   "ctrl-l": "terminal:clear"
@@ -34,7 +34,7 @@
   "cmd-e": "terminal:set-selection-as-find-pattern"
   # Ordinarily we'd bind an unfocus command to Esc — but Esc in particular
   # seems to stubbornly be claimed by Xterm, even if modifier keys are present!
-  "cmd-alt-~ u": "terminal:unfocus"
+  "ctrl-`": "terminal:unfocus"
 
 ".platform-darwin .terminal-find-palette atom-text-editor":
   # Ensure these shortcuts work equally well whether the terminal or the "find"
