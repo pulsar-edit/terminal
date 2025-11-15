@@ -1,6 +1,6 @@
 import fs from 'fs-extra';
 
-import { CompositeDisposable, Disposable } from 'atom';
+import { CompositeDisposable, Disposable, KeyBinding } from 'atom';
 import { TerminalModel } from './model';
 import { Config } from './config';
 
@@ -45,6 +45,45 @@ function clampLineHeight (lineHeight: number, fontSize: number) {
   let lineHeightInPx = fontSize * lineHeight;
   let roundedScaledLineHeightInPx = Math.round(lineHeightInPx * window.devicePixelRatio);
   return roundedScaledLineHeightInPx / (fontSize * window.devicePixelRatio);
+}
+
+// Returns `true` if, at the current moment, Pulsar’s `KeymapManager` has at
+// least one pending keybinding that belongs to one of this package's commands.
+//
+// We use this to decide whether we should re-propagate a keyboard event that
+// xterm.js already swallowed. If we don't do this, `KeymapManager` gets
+// confused, especially since it'll still receive the `keyup` event for the key
+// the user just pressed.
+//
+// TODO: This might make sense to apply universally, not just where `terminal:`
+// commands are involved. But this is a cautious first step.
+function keymapHasPendingPartialMatches () {
+  // @ts-ignore Undocumented
+  let partialMatches: KeyBinding[] | null = atom.keymaps.pendingPartialMatches;
+  if (!partialMatches) return false;
+  return partialMatches.some((kb) => kb.command.startsWith('terminal:'));
+}
+
+// Takes a DOM `KeyboardEvent` whose default was already prevented and creates
+// a fresh event so we can re-propagate it upward. This allows certain key
+// bindings and key sequences to keep working even if some of their events are
+// swallowed by xterm.js.
+function redispatchKeyboardEvent(originalEvent: KeyboardEvent, targetElement: EventTarget) {
+  let newEvent = new KeyboardEvent(originalEvent.type, {
+    bubbles: true,
+    cancelable: true,
+    key: originalEvent.key,
+    code: originalEvent.code,
+    location: originalEvent.location,
+    ctrlKey: originalEvent.ctrlKey,
+    shiftKey: originalEvent.shiftKey,
+    altKey: originalEvent.altKey,
+    metaKey: originalEvent.metaKey,
+    repeat: originalEvent.repeat,
+    isComposing: originalEvent.isComposing
+  });
+
+  targetElement.dispatchEvent(newEvent);
 }
 
 export class TerminalElement extends HTMLElement {
@@ -376,6 +415,24 @@ export class TerminalElement extends HTMLElement {
     this.terminal = new XTerminal({
       allowProposedApi: true,
       ...this.getXtermOptions()
+    });
+
+    this.terminal.onKey((event) => {
+      // Take keys that were already handled by xterm.js and handle them again
+      // in Pulsar.
+      //
+      // It's hard to know exactly when to do this. If we _never_ do it,
+      // certain keybindings just won't ever work when the terminal is fully
+      // focused. If we _always_ do it, then every single keystroke the user
+      // types in the terminal has the potential to both produce a character
+      // (or action) in the terminal _and_ trigger a command in the workspace.
+      //
+      // Right now, we act very cautiously and only redispatch keyboard events
+      // if we think that doing so might complete a pending match _related to
+      // one of this package's commands_.
+      if (keymapHasPendingPartialMatches()) {
+        redispatchKeyboardEvent(event.domEvent, this);
+      }
     });
 
     this.#fitAddon = new FitAddon();
