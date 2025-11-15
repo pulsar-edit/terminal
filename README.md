@@ -2,11 +2,55 @@
 
 Terminal emulation in Pulsar.
 
+![screenshot of terminal package](./images/terminal-package-screenshot.png)
+
 Uses [XTerm](https://xtermjs.org/) and [`node-pty`](https://github.com/microsoft/node-pty).
 
 Inspiration taken from [`x-terminal-reloaded`](https://github.com/Spiker985/x-terminal-reloaded), [`atom-community/terminal`](https://github.com/atom-community/terminal), and all their predecessors.
 
+## Commands
+
+The simplest command is bound to <kbd>ctrl-\`</kbd> on all platforms: `terminal:focus`. This command will focus the last active terminal (if one exists), or else create a new terminal.
+
+> [!NOTE]
+> When focus is in a terminal, the terminal itself may handle some keystrokes _instead of_ Pulsar. If you notice that some of your keybindings don’t work inside the terminal, press <kbd>ctrl-\`</kbd> while the terminal is focused in order to _unfocus_ the terminal; at that point you’ll be able to press any key sequence and have it be interpreted by Pulsar instead of your terminal.
+
+Most of the package’s keybindings rely on a [key sequence](https://docs.pulsar-edit.dev/using-pulsar/basics/#key-sequence): first press the main shortcut (<kbd>ctrl-shift-\`</kbd> on all platforms), then press a second key.
+
+If you want to make any of these commands available via a simpler key binding, you can [customize your keybindings](https://docs.pulsar-edit.dev/customizing-pulsar/customizing-keybindings/).
+
+### Workspace keybindings
+
+|Command|Description|Keybinding (Linux/Windows)|Keybinding (macOS)|
+|-------|-----------|------------------|-----------------|
+|`terminal:focus`|Focus the active terminal, or create one if needed|<kbd>ctrl-\`</kbd>|<kbd>ctrl-\`</kbd>|
+|`terminal:open`|Create a new terminal in the default location|<kbd>ctrl-shift-\`</kbd> <kbd>N</kbd>|<kbd>ctrl-shift-\`</kbd> <kbd>N</kbd>|
+|`terminal:open-left-dock`|Create a new terminal in the left dock|<kbd>ctrl-shift-\`</kbd> <kbd>L</kbd>|<kbd>ctrl-shift-\`</kbd> <kbd>L</kbd>|
+|`terminal:open-right-dock`|Create a new terminal in the right dock|<kbd>ctrl-shift-\`</kbd> <kbd>R</kbd>|<kbd>ctrl-shift-\`</kbd> <kbd>R</kbd>|
+|`terminal:open-bottom-dock`|Create a new terminal in the bottom dock|<kbd>ctrl-shift-\`</kbd> <kbd>B</kbd>|<kbd>ctrl-shift-\`</kbd> <kbd>B</kbd>|
+|`terminal:open-split-up`|Create a new terminal by splitting the current pane container upward|<kbd>ctrl-shift-\`</kbd> <kbd>Up</kbd>|<kbd>ctrl-shift-\`</kbd> <kbd>Up</kbd>|
+|`terminal:open-split-down`|Create a new terminal by splitting the current pane container downward|<kbd>ctrl-shift-\`</kbd> <kbd>Down</kbd>|<kbd>ctrl-shift-\`</kbd> <kbd>Down</kbd>|
+|`terminal:open-split-left`|Create a new terminal by splitting the current pane container leftward|<kbd>ctrl-shift-\`</kbd> <kbd>Left</kbd>|<kbd>ctrl-shift-\`</kbd> <kbd>Left</kbd>|
+|`terminal:open-split-right`|Create a new terminal by splitting the current pane container rightward|<kbd>ctrl-shift-\`</kbd> <kbd>Right</kbd>|<kbd>ctrl-shift-\`</kbd> <kbd>Right</kbd>|
+|`terminal:run-selected-text`|Run the selected text in the active terminal|<kbd>ctrl-shift-\`</kbd> <kbd>X</kbd>|<kbd>ctrl-shift-\`</kbd> <kbd>X</kbd>|
+|`terminal:insert-selected-text`|Insert the selected text into the active terminal|<kbd>ctrl-shift-\`</kbd> <kbd>I</kbd>|<kbd>ctrl-shift-\`</kbd> <kbd>I</kbd>|
+
+### Terminal keybindings
+
+These commands and key bindings can be used when the terminal has focus.
+
+|Command|Description|Keybinding (Linux/Windows)|Keybinding (macOS)|
+|-------|-----------|------------------|-----------------|
+|`terminal:clear`|Clear the screen|<kbd>ctrl-L</kbd>|<kbd>ctrl-L</kbd> or <kbd>cmd-alt-K</kbd>|
+|`terminal:find`|Open the find palette|<kbd>ctrl-F</kbd>|<kbd>cmd-F</kbd>|
+|`terminal:find-next`|Jump to the next match in the find palette|<kbd>F3</kbd>|<kbd>cmd-G</kbd>|
+|`terminal:find-previous`|Jump to the previous match in the find palette|<kbd>shift-F3</kbd>|<kbd>cmd-shift-G</kbd>|
+|`terminal:set-selection-as-find-pattern`|Use the selected terminal text as the search term in the find palette|<kbd>ctrl-E</kbd>|<kbd>cmd-E</kbd>|
+|`terminal:unfocus`|Unfocus the terminal, moving focus to the terminal’s pane container|<kbd>ctrl-\`</kbd> |<kbd>ctrl-\`</kbd>|
+
 ## Theming
+
+The colors and fonts used by the terminal can be customized. By default, your terminal will try to reuse many aspects of your editor’s theme, but you can change this behavior.
 
 This package supports multiple approaches to theming:
 
@@ -83,47 +127,15 @@ You could also hard-code a hex or `rgba` value, or use one of Less’s [color ma
 
 ### Configuration
 
-If you prefer, you can define your terminal theme colors explicitly via configuration. The collapsed **Custom Theme Colors** section in the package settings lets you customize each color via color picker.
+If you prefer, you can eschew the stylesheet approach and define your terminal theme colors explicitly via configuration. The collapsed **Custom Theme Colors** section in the package settings lets you customize each individual color.
 
 Be sure to switch the **Color Theme** setting to **Config** in order for these colors to be used.
 
-As stated in the package settings, all color values support transparency and can accept `rgba()` CSS literal values, even though the color picker in the `settings-view` UI [doesn’t (yet) let you specify an alpha channel](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/input/color#html.elements.input.alpha).
-
-To add an alpha channel to any color value, first customize it in the `settings-view` UI (so that the appropriate key is placed in your `config.cson`); then [edit your `config.cson`](https://docs.pulsar-edit.dev/customizing-pulsar/global-configuration-settings/) and drill down from the top-level `terminal:key` to find the value you just customized. Change it to the value you want, then save your `config.cson`.
+> [!NOTE]
+> As stated in the package settings, all color values support transparency and can accept `rgba()` CSS literal values, even though the color picker in the `settings-view` UI [doesn’t (yet) let you specify an alpha channel](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/input/color#html.elements.input.alpha).
+>
+> To add an alpha channel to any color value, first customize it in the `settings-view` UI (so that the appropriate key is placed in your `config.cson`); then [edit your `config.cson`](https://docs.pulsar-edit.dev/customizing-pulsar/global-configuration-settings/) and drill down from the top-level `terminal:key` to find the value you just customized. Change it to the value you want, then save your `config.cson`.
 
 ### Legacy themes
 
 All other values in the **Color Theme** list are specific terminal themes with hard-coded values. These themes are included because they were present in this package’s predecessors (`x-terminal`, etc.), but they are not comprehensive; most only define foreground and background text colors and otherwise will fall back onto colors specified in the **Custom Theme Colors** section.
-
-## Commands
-
-Most of the package’s keybindings rely on a [key sequence](https://docs.pulsar-edit.dev/using-pulsar/basics/#key-sequence): first press the main shortcut (<kbd>ctrl-shift-\`</kbd> on macOS, <kbd>cmd-alt-shift-\`</kbd> on Windows/Linux), then press a second key.
-
-If you want to make any of these commands available via a simpler key binding, you can [customize your keybindings](https://docs.pulsar-edit.dev/customizing-pulsar/customizing-keybindings/).
-
-### Workspace keybindings
-
-|Command|Description|Keybinding (Linux/Windows)|Keybinding (macOS)|
-|-------|-----------|------------------|-----------------|
-|`terminal:focus`|Focus the active terminal, or create one if needed|<kbd>ctrl-\`</kbd>|<kbd>cmd-alt-\`</kbd>|
-|`terminal:open`|Create a new terminal in the default location|<kbd>ctrl-shift-\`</kbd> <kbd>N</kbd>|<kbd>cmd-alt-shift-\`</kbd> <kbd>N</kbd>|
-|`terminal:open-left-dock`|Create a new terminal in the left dock|<kbd>ctrl-shift-\`</kbd> <kbd>L</kbd>|<kbd>cmd-alt-shift-\`</kbd> <kbd>L</kbd>|
-|`terminal:open-right-dock`|Create a new terminal in the right dock|<kbd>ctrl-shift-\`</kbd> <kbd>R</kbd>|<kbd>cmd-alt-shift-\`</kbd> <kbd>R</kbd>|
-|`terminal:open-bottom-dock`|Create a new terminal in the bottom dock|<kbd>ctrl-shift-\`</kbd> <kbd>B</kbd>|<kbd>cmd-alt-shift-\`</kbd> <kbd>B</kbd>|
-|`terminal:open-split-up`|Create a new terminal by splitting the current pane container upward|<kbd>ctrl-shift-\`</kbd> <kbd>Up</kbd>|<kbd>cmd-alt-shift-\`</kbd> <kbd>Up</kbd>|
-|`terminal:open-split-down`|Create a new terminal by splitting the current pane container downward|<kbd>ctrl-shift-\`</kbd> <kbd>Down</kbd>|<kbd>cmd-alt-shift-\`</kbd> <kbd>Down</kbd>|
-|`terminal:open-split-left`|Create a new terminal by splitting the current pane container leftward|<kbd>ctrl-shift-\`</kbd> <kbd>Left</kbd>|<kbd>cmd-alt-shift-\`</kbd> <kbd>Left</kbd>|
-|`terminal:open-split-right`|Create a new terminal by splitting the current pane container rightward|<kbd>ctrl-shift-\`</kbd> <kbd>Right</kbd>|<kbd>cmd-alt-shift-\`</kbd> <kbd>Right</kbd>|
-|`terminal:run-selected-text`|Run the selected text in the active terminal|<kbd>ctrl-shift-\`</kbd> <kbd>X</kbd>|<kbd>cmd-alt-shift-\`</kbd> <kbd>X</kbd>|
-|`terminal:insert-selected-text`|Insert the selected text into the active terminal|<kbd>ctrl-shift-\`</kbd> <kbd>I</kbd>|<kbd>cmd-alt-shift-\`</kbd> <kbd>I</kbd>|
-
-### Terminal keybindings
-
-|Command|Description|Keybinding (Linux/Windows)|Keybinding (macOS)|
-|-------|-----------|------------------|-----------------|
-|`terminal:clear`|Clear the screen|<kbd>ctrl-L</kbd>|<kbd>ctrl-L</kbd> or <kbd>cmd-alt-K</kbd>|
-|`terminal:find`|Open the find palette|<kbd>ctrl-F</kbd>|<kbd>cmd-F</kbd>|
-|`terminal:find-next`|Jump to the next match in the find palette|<kbd>F3</kbd>|<kbd>cmd-G</kbd>|
-|`terminal:find-previous`|Jump to the previous match in the find palette|<kbd>shift-F3</kbd>|<kbd>cmd-shift-G</kbd>|
-|`terminal:set-selection-as-find-pattern`|Use the selected terminal text as the search term in the find palette|<kbd>ctrl-E</kbd>|<kbd>cmd-E</kbd>|
-|`terminal:unfocus`|Unfocus the terminal, moving focus to the terminal’s pane container|<kbd>ctrl-shift-\`</kbd> <kbd>U</kbd>|<kbd>cmd-alt-shift-\`</kbd> <kbd>U</kbd>|
