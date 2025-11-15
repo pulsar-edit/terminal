@@ -2,7 +2,7 @@
 
 Terminal emulation in Pulsar.
 
-![screenshot of terminal package](./images/terminal-package-screenshot.png)
+![screenshot of terminal package](https://raw.githubusercontent.com/pulsar-edit/terminal/main/images/terminal-package-screenshot.png)
 
 Uses [XTerm](https://xtermjs.org/) and [`node-pty`](https://github.com/microsoft/node-pty).
 
