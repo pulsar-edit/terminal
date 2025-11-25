@@ -44,7 +44,7 @@
     "etch": "^0.14.1",
     "fs-extra": "^11.3.2",
     "ndjson": "^2.0.0",
-    "node-pty": "https://github.com/pulsar-edit/node-pty.git",
+    "node-pty": "npm:@pulsar-edit/node-pty@v1.0.0-beta34-pulsar",
     "which": "^6.0.0"
   },
   "devDependencies": {

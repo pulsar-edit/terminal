@@ -4,9 +4,9 @@ import { CompositeDisposable, Disposable, KeyBinding } from 'atom';
 import { TerminalModel } from './model';
 import { Config } from './config';
 
-import { ILinkHandler, ITerminalOptions, ITheme, IViewportRange, Terminal as XTerminal } from '@xterm/xterm';
+import { ITerminalOptions, ITheme, Terminal as XTerminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
-import { ILinkProviderOptions, WebLinksAddon } from '@xterm/addon-web-links';
+import { WebLinksAddon } from '@xterm/addon-web-links';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { LigaturesAddon } from '@xterm/addon-ligatures';
 import { SearchAddon } from '@xterm/addon-search';

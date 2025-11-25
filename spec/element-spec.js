@@ -1,4 +1,4 @@
-const nodePty = require('node-pty');
+// const nodePty = require('node-pty');
 const { shell } = require('@electron/remote');
 
 const config = require('../lib/config');
