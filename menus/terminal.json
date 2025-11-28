@@ -98,7 +98,7 @@
             },
             {
               "label": "Open New",
-              "command": "terminal:open-"
+              "command": "terminal:open"
             },
             {
               "label": "Open New In…",
@@ -109,19 +109,19 @@
                 },
                 {
                   "label": "Split Up",
-                  "command": "terminal:open-up"
+                  "command": "terminal:open-split-up"
                 },
                 {
                   "label": "Split Down",
-                  "command": "terminal:open-down"
+                  "command": "terminal:open-split-down"
                 },
                 {
                   "label": "Split Left",
-                  "command": "terminal:open-left"
+                  "command": "terminal:open-split-left"
                 },
                 {
                   "label": "Split Right",
-                  "command": "terminal:open-right"
+                  "command": "terminal:open-split-right"
                 },
                 {
                   "label": "Bottom Dock",
