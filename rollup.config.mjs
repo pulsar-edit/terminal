@@ -90,6 +90,7 @@ export default [{
     'etch',
     'fs-extra',
     'ndjson',
+    'tslib',
     'which'
   ]
 },
@@ -133,6 +134,7 @@ export default [{
   // further package you want to make external if you know what you're doing.
   external: [
     'ndjson',
-    'node-pty'
+    'node-pty',
+    'tslib'
   ]
 }];

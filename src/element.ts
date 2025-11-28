@@ -4,6 +4,8 @@ import { CompositeDisposable, Disposable, KeyBinding } from 'atom';
 import { TerminalModel } from './model';
 import { Config } from './config';
 
+
+
 import { ITerminalOptions, ITheme, Terminal as XTerminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
