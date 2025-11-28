@@ -25,7 +25,7 @@ export type TerminalModelOptions = {
 
 const DEFAULT_TITLE = 'Terminal';
 
-const ALLOWED_LOCATIONS: PaneItemLocation[]  = ['left', 'right', 'center', 'bottom'];
+const ALLOWED_LOCATIONS: PaneItemLocation[]  = ['center', 'bottom', 'left', 'right'];
 
 /**
  * The representation of a terminal in the Atom workspace.

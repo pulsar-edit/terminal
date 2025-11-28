@@ -295,6 +295,11 @@ export default class Terminal {
 
   static async open (uri: string, options: OpenOptions = {}): Promise<TerminalModel> {
     let url = new URL(uri);
+    // When calling `atom.workspace.open` with a URI, Pulsar does not consider
+    // the active pane container when choosing a location for the new item. So
+    // we must force it to do so by inspecting the active pane container and
+    // turning it into a string suitable for passing to `options.location`.
+    options.location ??= this.getActiveWorkspaceLocation();
     if (options.target && (options.target instanceof HTMLElement) && !url.searchParams.has('cwd')) {
       let cwd = this.getPath(options.target);
       if (cwd) {
@@ -303,6 +308,22 @@ export default class Terminal {
     }
 
     return await atom.workspace.open(url.href, options) as Promise<TerminalModel>;
+  }
+
+  static getActiveWorkspaceLocation() {
+    let activeContainer = atom.workspace.getActivePaneContainer();
+    switch (activeContainer) {
+      case atom.workspace.getCenter():
+        return 'center';
+      case atom.workspace.getBottomDock():
+        return 'bottom';
+      case atom.workspace.getLeftDock():
+        return 'left';
+      case atom.workspace.getRightDock():
+        return 'right';
+      default:
+        return undefined;
+    }
   }
 
   static close () {
