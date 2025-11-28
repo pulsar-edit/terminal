@@ -347,7 +347,7 @@ export class TerminalElement extends HTMLElement {
         result = JSON.parse(rawValue);
       } catch (err) {
         atom.notifications.addError('Terminal: Invalid configuration', {
-          description: `The value of **XTerm Configuration → AdditionalOptions** is not valid JSON.`
+          description: `The value of **XTerm Configuration → Additional Options** is not valid JSON.`
         });
         result = {};
       }
@@ -396,7 +396,7 @@ export class TerminalElement extends HTMLElement {
     }
     Config.set('advanced.warnAboutModifierWhenOpeningUrls', false);
     atom.notifications.addInfo(`Terminal: Click ignored`, {
-      description: `For security and protection against accidental clicks, you must hold <kbd>${isMac() ? 'Cmd' : 'Ctrl'}</kbd> while clicking URLs. You may disable this requirement in the package settings. (This message will be shown only once.)`,
+      description: `For security and protection against accidental clicks, you must hold <kbd>${isMac() ? 'Cmd' : 'Ctrl'}</kbd> while clicking URLs in order to open them in your browser. You may disable this requirement in the package settings. (This message will be shown only once.)`,
       dismissable: true,
       buttons: [
         {

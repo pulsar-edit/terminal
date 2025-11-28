@@ -44,8 +44,9 @@
     "etch": "^0.14.1",
     "fs-extra": "^11.3.2",
     "ndjson": "^2.0.0",
-    "node-pty": "npm:@pulsar-edit/node-pty@v1.0.0-beta34-pulsar",
-    "which": "^6.0.0"
+    "node-pty": "npm:@pulsar-edit/node-pty@^1.0.0-beta34-pulsar",
+    "tslib": "^2.8.1",
+    "which": "^5.0.0"
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^28.0.3",
@@ -58,7 +59,6 @@
     "@types/which": "^3.0.4",
     "rollup": "^4.40.0",
     "temp": "^0.9.4",
-    "tslib": "^2.8.1",
     "typescript": "^5.8.3"
   },
   "providedServices": {
