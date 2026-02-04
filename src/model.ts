@@ -364,6 +364,10 @@ export class TerminalModel {
     this.element?.pty?.write(command + os.EOL.charAt(0));
   }
 
+  sendSequence (sequence: string[]) {
+    this.element?.sendSequence(sequence);
+  }
+
   /** Clear the screen. */
   clear () {
     this.element?.clear();

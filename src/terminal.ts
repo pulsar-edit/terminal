@@ -136,6 +136,14 @@ export default class Terminal {
         'core:select-all': (event) => {
           return this.selectAll(event);
         },
+        'terminal:send-sigterm': (event) => {
+          let element = this.inferTerminalElement(event);
+          if (!element || !element.terminal) {
+            console.warn('No terminal found');
+            return;
+          }
+          return element.sendSequence(['\u0003']);
+        },
         'terminal:set-selection-as-find-pattern': (event) => {
           let element = this.inferTerminalElement(event);
           if (!element || !element.terminal) return;
@@ -374,6 +382,13 @@ export default class Terminal {
     return result;
   }
 
+  static async sendSequence(sequence: string[] = []) {
+    let terminal = this.getActiveTerminal();
+    if (!terminal || !terminal.element) return false;
+    await terminal.element.ready();
+
+  }
+
   static async canRunCommands (commands: string[]) {
     let serializedCommands = JSON.stringify(commands);
     if ((Config.get('advanced.allowedCommands') ?? []).includes(serializedCommands)) {
@@ -408,7 +423,6 @@ export default class Terminal {
             onDidClick () {
               disposable?.dispose();
               let allowedCommands = Config.get('advanced.allowedCommands') ?? [];
-              console.log('Adding:', serializedCommands);
               Config.set('advanced.allowedCommands', [...allowedCommands, serializedCommands]);
               notification.dismiss();
               resolve(true);
@@ -695,6 +709,12 @@ export default class Terminal {
       },
       open: () => {
         return this.openTerminal();
+      },
+      sendSequence: (sequence: string[] | string) => {
+        if (!Array.isArray(sequence)) {
+          sequence = [sequence];
+        }
+        return this.sendSequence(sequence);
       }
     }
   }

@@ -73,6 +73,7 @@ export declare class TerminalModel {
      * Like `paste`, except it inserts a carriage return at the end of the input.
      */
     run(command: string): void;
+    sendSequence(sequence: string[]): void;
     /** Clear the screen. */
     clear(): void;
     /** Make this terminal the active terminal. */

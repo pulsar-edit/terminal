@@ -4,8 +4,6 @@ import { CompositeDisposable, Disposable, KeyBinding } from 'atom';
 import { TerminalModel } from './model';
 import { Config } from './config';
 
-
-
 import { ITerminalOptions, ITheme, Terminal as XTerminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
@@ -710,6 +708,21 @@ export class TerminalElement extends HTMLElement {
 
   clear () {
     this.terminal?.clear();
+  }
+
+  sendSequence (sequence: string[]) {
+    if (!this.terminal) {
+      console.warn('No terminal!');
+      return false;
+    }
+    if (!this.pty) {
+      console.warn('No PTY!');
+      return false;
+    }
+    for (let code of sequence) {
+      this.pty.write(code);
+    }
+    return true;
   }
 
   refitTerminal () {

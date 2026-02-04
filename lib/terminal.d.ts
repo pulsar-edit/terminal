@@ -24,6 +24,7 @@ export default class Terminal {
      * Service function for opening a terminal.
      */
     static openTerminal(options?: OpenOptions): Promise<TerminalModel>;
+    static sendSequence(sequence?: string[]): Promise<false | undefined>;
     static canRunCommands(commands: string[]): Promise<unknown>;
     /**
      * Service function which opens a terminal and runs the given commands.
@@ -61,6 +62,7 @@ export default class Terminal {
     static provideTerminalService(): {
         run: (commands: string[]) => Promise<boolean>;
         open: () => Promise<TerminalModel>;
+        sendSequence: (sequence: string[] | string) => Promise<false | undefined>;
     };
     /**
      * Provide the `platformioIDETerminal` service.

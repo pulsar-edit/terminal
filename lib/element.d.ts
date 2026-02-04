@@ -43,6 +43,7 @@ export declare class TerminalElement extends HTMLElement {
     promptToStartup(): Promise<void>;
     restartPtyProcess(): Promise<void>;
     clear(): void;
+    sendSequence(sequence: string[]): boolean;
     refitTerminal(): void;
     focusTerminal(double?: boolean): Promise<void>;
     selectAll(): void;
