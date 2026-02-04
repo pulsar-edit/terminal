@@ -136,7 +136,7 @@ export default class Terminal {
         'core:select-all': (event) => {
           return this.selectAll(event);
         },
-        'terminal:send-sigterm': (event) => {
+        'terminal:send-sigint': (event) => {
           let element = this.inferTerminalElement(event);
           if (!element || !element.terminal) {
             console.warn('No terminal found');

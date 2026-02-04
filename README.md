@@ -172,7 +172,7 @@ Sends the given sequence or sequences to the active terminal. Returns a promise 
 
 Similar to `run`, but…
 
-* …does not write a newline at the end. This is envisioned to be used to send control characters to the PTY — for example, `\x03`, which typically maps to `SIGTERM`.
+* …does not write a newline at the end. This is envisioned to be used to send control characters to the PTY — for example, `\x03`, which typically maps to `SIGINT`.
 * …does not create a new terminal. If there is no “active” terminal, then this method will return `false` and do nothing.
 * …does not prompt the user to approve or reject the sequences to be sent, though this may change in the future.
 
