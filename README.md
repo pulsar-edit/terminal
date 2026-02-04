@@ -148,7 +148,7 @@ This package defines a `terminal` service that is a streamlined version of the `
 
 Rather than serve as a direct copy of the `platformioIDETerminal` service described below, it aims to discard unneeded methods. It uses version `2.0.0` to signify a break in backward compatibility.
 
-It may add methods in the future, but for now it provides an object with two simple methods to its consumers:
+It may add methods in the future, but for now it provides an object with a few simple methods:
 
 #### `open(): Promise<void>`
 
@@ -166,11 +166,21 @@ Also keep in mind that the consuming package isn’t allowed to inspect the outp
 
 Returns a promise that resolves to a boolean: `true` if the commands actually ran, and `false` if they did not.
 
+#### `sendSequence(sequences: string[] | string): Promise<boolean>`
+
+Sends the given sequence or sequences to the active terminal. Returns a promise that resolves to a boolean: `true` if the sequences were sent, and `false` if they were not.
+
+Similar to `run`, but…
+
+* …does not write a newline at the end. This is envisioned to be used to send control characters to the PTY — for example, `\x03`, which typically maps to `SIGTERM`.
+* …does not create a new terminal. If there is no “active” terminal, then this method will return `false` and do nothing.
+* …does not prompt the user to approve or reject the sequences to be sent, though this may change in the future.
+
 ### `platformioIDETerminal` (version 1.1.0)
 
 This service is supported for the sake of compatibility, since it’s arguably the most widely used terminal service. As the name implies, this service was originally created by the `platformio-ide-terminal` package.
 
-The `platformioIDETerminal` service supports both methods defined above, plus:
+The `platformioIDETerminal` service supports the `open` and `run` methods defined above, plus:
 
 #### `getTerminalViews(): TerminalModel`
 
