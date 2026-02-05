@@ -9,7 +9,7 @@ import {
 } from  'atom';
 import { Config, getConfigSchema, possiblySetAutoShell } from './config';
 import { TerminalElement } from './element';
-import { TerminalModel } from './model';
+import { isSafeSignal, TerminalModel } from './model';
 import { BASE_URI, debounce, recalculateActive, generateUri } from './utils';
 
 type OpenOptions = WorkspaceOpenOptions & {
@@ -138,11 +138,8 @@ export default class Terminal {
         },
         'terminal:send-sigint': (event) => {
           let element = this.inferTerminalElement(event);
-          if (!element || !element.terminal) {
-            console.warn('No terminal found');
-            return;
-          }
-          return element.sendSequence(['\u0003']);
+          if (!element || !element.terminal) return;
+          return element.sendSignal('SIGINT');
         },
         'terminal:set-selection-as-find-pattern': (event) => {
           let element = this.inferTerminalElement(event);
@@ -382,11 +379,23 @@ export default class Terminal {
     return result;
   }
 
-  static async sendSequence(sequence: string[] = []) {
+  /**
+   * Function for sending a signal to the active terminal.
+   *
+   * It's risky to allow arbitrary control of a terminal to another package.
+   * The `run` method gets around it by prompting the user with the exact
+   * command that was requested to run; this method gets around it by allowing
+   * only one of three signals: `SIGINT`, `SIGQUIT`, or `SIGTERM`.
+   */
+  // TODO: Not yet exposed as part of a service; needs discussion.
+  static async sendSignal(signal: string) {
+    if (!isSafeSignal(signal)) return;
+
     let terminal = this.getActiveTerminal();
     if (!terminal || !terminal.element) return false;
     await terminal.element.ready();
 
+    terminal.element.sendSignal(signal);
   }
 
   static async canRunCommands (commands: string[]) {
@@ -465,6 +474,9 @@ export default class Terminal {
     if (!terminal.element) return false;
     await terminal.element.ready();
 
+    // Ensure these commands are approved by the user — either already
+    // whitelisted or shown to the user in a prompt so that they can
+    // approve/reject.
     if (!(await this.canRunCommands(commands))) {
       return false;
     }
@@ -709,13 +721,10 @@ export default class Terminal {
       },
       open: () => {
         return this.openTerminal();
-      },
-      sendSequence: (sequence: string[] | string) => {
-        if (!Array.isArray(sequence)) {
-          sequence = [sequence];
-        }
-        return this.sendSequence(sequence);
       }
+      // TODO: Determine if it's safe to expose `sendSignal` via this service.
+      // It overlaps with `run` and technically should use some of the same
+      // security tactics (like user approval).
     }
   }
 

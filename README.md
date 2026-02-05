@@ -166,16 +166,6 @@ Also keep in mind that the consuming package isn’t allowed to inspect the outp
 
 Returns a promise that resolves to a boolean: `true` if the commands actually ran, and `false` if they did not.
 
-#### `sendSequence(sequences: string[] | string): Promise<boolean>`
-
-Sends the given sequence or sequences to the active terminal. Returns a promise that resolves to a boolean: `true` if the sequences were sent, and `false` if they were not.
-
-Similar to `run`, but…
-
-* …does not write a newline at the end. This is envisioned to be used to send control characters to the PTY — for example, `\x03`, which typically maps to `SIGINT`.
-* …does not create a new terminal. If there is no “active” terminal, then this method will return `false` and do nothing.
-* …does not prompt the user to approve or reject the sequences to be sent, though this may change in the future.
-
 ### `platformioIDETerminal` (version 1.1.0)
 
 This service is supported for the sake of compatibility, since it’s arguably the most widely used terminal service. As the name implies, this service was originally created by the `platformio-ide-terminal` package.
@@ -188,6 +178,6 @@ Returns each terminal view currently open in the workspace. Each terminal view i
 
 Beware, though; this package makes no claim that these instances will share any properties or methods with whatever was returned by `platform-ide-terminal` for this method.
 
-#### updateProcessEnv()
+#### `updateProcessEnv()`
 
 This method is provided so that this package technically conforms to the `platformioIDETerminal` service contract, but it does nothing. (It’s not clear that its original implementation ever did anything useful that couldn’t have been done by setting `process.env` directly.)

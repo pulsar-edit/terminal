@@ -1,4 +1,4 @@
-import { TerminalModel } from './model';
+import { Signal, TerminalModel } from './model';
 import { ITerminalOptions, ITheme, Terminal as XTerminal } from '@xterm/xterm';
 import { Pty } from './pty';
 export declare class TerminalElement extends HTMLElement {
@@ -43,7 +43,7 @@ export declare class TerminalElement extends HTMLElement {
     promptToStartup(): Promise<void>;
     restartPtyProcess(): Promise<void>;
     clear(): void;
-    sendSequence(sequence: string[]): boolean;
+    sendSignal(signal: Signal): boolean;
     refitTerminal(): void;
     focusTerminal(double?: boolean): Promise<void>;
     selectAll(): void;

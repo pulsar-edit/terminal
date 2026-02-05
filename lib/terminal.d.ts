@@ -24,7 +24,15 @@ export default class Terminal {
      * Service function for opening a terminal.
      */
     static openTerminal(options?: OpenOptions): Promise<TerminalModel>;
-    static sendSequence(sequence?: string[]): Promise<false | undefined>;
+    /**
+     * Function for sending a signal to the active terminal.
+     *
+     * It's risky to allow arbitrary control of a terminal to another package.
+     * The `run` method gets around it by prompting the user with the exact
+     * command that was requested to run; this method gets around it by allowing
+     * only one of three signals: `SIGINT`, `SIGQUIT`, or `SIGTERM`.
+     */
+    static sendSignal(signal: string): Promise<false | undefined>;
     static canRunCommands(commands: string[]): Promise<unknown>;
     /**
      * Service function which opens a terminal and runs the given commands.
@@ -62,7 +70,6 @@ export default class Terminal {
     static provideTerminalService(): {
         run: (commands: string[]) => Promise<boolean>;
         open: () => Promise<TerminalModel>;
-        sendSequence: (sequence: string[] | string) => Promise<false | undefined>;
     };
     /**
      * Provide the `platformioIDETerminal` service.

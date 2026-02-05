@@ -16,11 +16,11 @@
       { "type": "separator" },
       {
         "label": "Copy",
-        "command": "terminal:copy"
+        "command": "core:copy"
       },
       {
         "label": "Paste",
-        "command": "terminal:paste"
+        "command": "core:paste"
       },
       { "type": "separator" },
       {

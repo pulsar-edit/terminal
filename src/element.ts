@@ -1,7 +1,7 @@
 import fs from 'fs-extra';
 
 import { CompositeDisposable, Disposable, KeyBinding } from 'atom';
-import { TerminalModel } from './model';
+import { isSafeSignal, Signal, TerminalModel } from './model';
 import { Config } from './config';
 
 import { ITerminalOptions, ITheme, Terminal as XTerminal } from '@xterm/xterm';
@@ -710,7 +710,11 @@ export class TerminalElement extends HTMLElement {
     this.terminal?.clear();
   }
 
-  sendSequence (sequence: string[]) {
+  sendSignal (signal: Signal) {
+    if (!isSafeSignal(signal)) {
+      console.warn('Invalid signal');
+      return false;
+    }
     if (!this.terminal) {
       console.warn('No terminal!');
       return false;
@@ -719,10 +723,20 @@ export class TerminalElement extends HTMLElement {
       console.warn('No PTY!');
       return false;
     }
-    for (let code of sequence) {
-      this.pty.write(code);
+
+    switch (signal) {
+      case 'SIGTERM':
+        this.destroy();
+        return true;
+      case 'SIGINT':
+        this.pty.write('\x03');
+        return true;
+      case 'SIGQUIT':
+        this.pty.write('\x1c');
+        return true;
+      default:
+        return false;
     }
-    return true;
   }
 
   refitTerminal () {

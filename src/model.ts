@@ -27,6 +27,20 @@ const DEFAULT_TITLE = 'Terminal';
 
 const ALLOWED_LOCATIONS: PaneItemLocation[]  = ['center', 'bottom', 'left', 'right'];
 
+// “Safe” signals to allow to be sent programmatically.
+export type Signal = 'SIGTERM' | 'SIGQUIT' | 'SIGINT'
+
+export function isSafeSignal (signal: string): signal is Signal {
+  return signal === 'SIGTERM' || signal === 'SIGQUIT' || signal === 'SIGINT';
+}
+
+export function  controlCharacterForSignal (signal: Signal) {
+  switch (signal) {
+    case 'SIGTERM':
+      return
+  }
+}
+
 /**
  * The representation of a terminal in the Atom workspace.
  */
@@ -358,14 +372,11 @@ export class TerminalModel {
   /**
    * Run a command.
    *
-   * Like `paste`, except it inserts a carriage return at the end of the input.
+   * Like {@link paste}, except it inserts a carriage return at the end of the
+   * input.
    */
   run (command: string) {
     this.element?.pty?.write(command + os.EOL.charAt(0));
-  }
-
-  sendSequence (sequence: string[]) {
-    this.element?.sendSequence(sequence);
   }
 
   /** Clear the screen. */

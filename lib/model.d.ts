@@ -4,6 +4,9 @@ export type TerminalModelOptions = {
     terminals: Set<TerminalModel>;
     uri: string;
 };
+export type Signal = 'SIGTERM' | 'SIGQUIT' | 'SIGINT';
+export declare function isSafeSignal(signal: string): signal is Signal;
+export declare function controlCharacterForSignal(signal: Signal): void;
 /**
  * The representation of a terminal in the Atom workspace.
  */
@@ -70,10 +73,10 @@ export declare class TerminalModel {
     /**
      * Run a command.
      *
-     * Like `paste`, except it inserts a carriage return at the end of the input.
+     * Like {@link paste}, except it inserts a carriage return at the end of the
+     * input.
      */
     run(command: string): void;
-    sendSequence(sequence: string[]): void;
     /** Clear the screen. */
     clear(): void;
     /** Make this terminal the active terminal. */
