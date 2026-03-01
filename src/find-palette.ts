@@ -80,9 +80,11 @@ export default class FindPalette {
 
   search (term: string) {
     this.searchAddon.findNext(term, { decorations: this.searchTheme });
-    let text = this.refs.search.getText();
-    if (text !== term) {
-      this.refs.search.setText(term);
+    if (this.refs.search) {
+      let text = this.refs.search.getText();
+      if (text !== term) {
+        this.refs.search.setText(term);
+      }
     }
     this.term = term;
   }

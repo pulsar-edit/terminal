@@ -522,6 +522,8 @@ export class TerminalElement extends HTMLElement {
 
   async waitForShellEnvironment (timeoutMs: number = 5000) {
     let promise = new Promise<void>((resolve) => {
+      // This will invoke the callback immediately if the shell environment has
+      // already been loaded, so it's easy to promisify.
       atom.whenShellEnvironmentLoaded(resolve);
     });
     if (timeoutMs > 0) {
@@ -538,9 +540,9 @@ export class TerminalElement extends HTMLElement {
     this.terminal.options.theme = { ...theme };
   }
 
-  showFind (prefilledText?: string) {
-    if (!this.findPalette) return false;
-    this.findPalette.show();
+  async showFind (prefilledText?: string) {
+    if (!this.terminal || !this.findPalette) return false;
+    await this.findPalette.show();
     if (prefilledText) {
       this.findPalette.search(prefilledText);
     }
@@ -548,25 +550,25 @@ export class TerminalElement extends HTMLElement {
   }
 
   toggleFind () {
-    if (!this.findPalette) return false;
+    if (!this.terminal || !this.findPalette) return false;
     this.findPalette.toggle();
     return true;
   }
 
   hideFind () {
-    if (!this.findPalette) return false;
+    if (!this.terminal || !this.findPalette) return false;
     this.findPalette.hide();
     return true;
   }
 
   findNext () {
-    if (!this.findPalette) return false;
+    if (!this.terminal || !this.findPalette) return false;
     this.findPalette.findNext();
     return true;
   }
 
   findPrevious () {
-    if (!this.findPalette) return false;
+    if (!this.terminal || !this.findPalette) return false;
     this.findPalette.findPrevious();
     return true;
   }
@@ -763,6 +765,7 @@ export class TerminalElement extends HTMLElement {
   }
 
   refitTerminal () {
+    if (!this.terminal || !this.#fitAddon) return;
     if (!this.#terminalInitiallyVisible) {
       return;
     }
@@ -772,8 +775,8 @@ export class TerminalElement extends HTMLElement {
     if (this.#mainContentRect.height === 0 || this.#mainContentRect.width === 0) {
       return;
     }
-    this.#fitAddon!.fit();
-    let geometry = this.#fitAddon!.proposeDimensions();
+    this.#fitAddon.fit();
+    let geometry = this.#fitAddon.proposeDimensions();
     if (!geometry || !this.isPtyProcessRunning() || !this.pty) {
       return
     }

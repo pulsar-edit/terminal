@@ -32,7 +32,7 @@ export declare class TerminalElement extends HTMLElement {
     createTerminal(): Promise<void>;
     waitForShellEnvironment(timeoutMs?: number): Promise<unknown>;
     updateTheme(): void;
-    showFind(prefilledText?: string): boolean;
+    showFind(prefilledText?: string): Promise<boolean>;
     toggleFind(): boolean;
     hideFind(): boolean;
     findNext(): boolean;
