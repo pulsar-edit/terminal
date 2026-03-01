@@ -30,6 +30,7 @@ export declare class TerminalElement extends HTMLElement {
     setMainBackgroundColor(theme?: ITheme): void;
     optionallyWarnAboutModifierlessClick(): void;
     createTerminal(): Promise<void>;
+    waitForShellEnvironment(timeoutMs?: number): Promise<unknown>;
     updateTheme(): void;
     showFind(prefilledText?: string): boolean;
     toggleFind(): boolean;

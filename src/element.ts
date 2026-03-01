@@ -21,6 +21,7 @@ import {
   isMac,
   isWindows,
   PACKAGE_NAME,
+  timeout,
   willUseConPTY,
   windowsBuildNumber
 } from './utils';
@@ -412,6 +413,17 @@ export class TerminalElement extends HTMLElement {
   async createTerminal () {
     this.setMainBackgroundColor();
 
+    // We don't want to start a terminal until the shell environment has been
+    // loaded. Otherwise the shell may not inherit the right environment
+    // variables.
+    //
+    // Under normal circumstances, the package won't activate until that
+    // happens anyway; but when we restore a project with open terminal
+    // windows, the package will activate sooner than we'd ideally want. This
+    // enforces that, even when `TerminalElement` is instantiated early, we
+    // wait for the shell before proceeding.
+    await this.waitForShellEnvironment();
+
     this.terminal = new XTerminal({
       allowProposedApi: true,
       ...this.getXtermOptions()
@@ -506,6 +518,17 @@ export class TerminalElement extends HTMLElement {
     );
 
     await this.restartPtyProcess();
+  }
+
+  async waitForShellEnvironment (timeoutMs: number = 5000) {
+    let promise = new Promise<void>((resolve) => {
+      atom.whenShellEnvironmentLoaded(resolve);
+    });
+    if (timeoutMs > 0) {
+      return await timeout(promise, timeoutMs, { tag: 'waitForShellEnvironment' });
+    } else {
+      return await promise;
+    }
   }
 
   updateTheme () {
