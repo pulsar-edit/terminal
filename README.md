@@ -10,12 +10,12 @@ Based heavily on [`atomic-terminal`](https://github.com/atom-community/terminal)
 
 ## Commands
 
-The simplest command is bound to <kbd>ctrl-\`</kbd> on all platforms: `terminal:focus`. This command will focus the last active terminal (if one exists), or else create a new terminal.
+The simplest command is bound to <kbd>Ctrl-\`</kbd> on all platforms: `terminal:focus`. This command will focus the last active terminal (if one exists), or else create a new terminal.
 
 > [!NOTE]
-> When focus is in a terminal, the terminal itself may handle some keystrokes _instead of_ Pulsar. If you notice that some of your keybindings don’t work inside the terminal, press <kbd>ctrl-\`</kbd> while the terminal is focused in order to _unfocus_ the terminal; at that point you’ll be able to press any key sequence and have it be interpreted by Pulsar instead of your terminal.
+> When focus is in a terminal, the terminal itself may handle some keystrokes _instead of_ Pulsar. If you notice that some of your keybindings don’t work inside the terminal, press <kbd>Ctrl-\`</kbd> while the terminal is focused in order to _unfocus_ the terminal; at that point you’ll be able to press any key sequence and have it be interpreted by Pulsar instead of your terminal.
 
-Most of the package’s keybindings rely on a [key sequence](https://docs.pulsar-edit.dev/using-pulsar/basics/#key-sequence): first press the main shortcut (<kbd>ctrl-shift-\`</kbd> on all platforms), then press a second key.
+Most of the package’s keybindings rely on a [key sequence](https://docs.pulsar-edit.dev/using-pulsar/basics/#key-sequence): first press the main shortcut (<kbd>Ctrl-Shift-\`</kbd> on all platforms), then press a second key.
 
 If you want to make any of these commands available via a simpler keybinding, you can [customize your keybindings](https://docs.pulsar-edit.dev/customizing-pulsar/customizing-keybindings/).
 
@@ -23,17 +23,17 @@ If you want to make any of these commands available via a simpler keybinding, yo
 
 |Command|Description|Keybinding (Linux/Windows)|Keybinding (macOS)|
 |-------|-----------|------------------|-----------------|
-|`terminal:focus`|Focus the active terminal, or create one if needed|<kbd>ctrl-\`</kbd>|<kbd>ctrl-\`</kbd>|
-|`terminal:open`|Create a new terminal in the default location|<kbd>ctrl-shift-\`</kbd> <kbd>N</kbd>|<kbd>ctrl-shift-\`</kbd> <kbd>N</kbd>|
-|`terminal:open-left-dock`|Create a new terminal in the left dock|<kbd>ctrl-shift-\`</kbd> <kbd>L</kbd>|<kbd>ctrl-shift-\`</kbd> <kbd>L</kbd>|
-|`terminal:open-right-dock`|Create a new terminal in the right dock|<kbd>ctrl-shift-\`</kbd> <kbd>R</kbd>|<kbd>ctrl-shift-\`</kbd> <kbd>R</kbd>|
-|`terminal:open-bottom-dock`|Create a new terminal in the bottom dock|<kbd>ctrl-shift-\`</kbd> <kbd>B</kbd>|<kbd>ctrl-shift-\`</kbd> <kbd>B</kbd>|
-|`terminal:open-split-up`|Create a new terminal by splitting the current pane container upward|<kbd>ctrl-shift-\`</kbd> <kbd>Up</kbd>|<kbd>ctrl-shift-\`</kbd> <kbd>Up</kbd>|
-|`terminal:open-split-down`|Create a new terminal by splitting the current pane container downward|<kbd>ctrl-shift-\`</kbd> <kbd>Down</kbd>|<kbd>ctrl-shift-\`</kbd> <kbd>Down</kbd>|
-|`terminal:open-split-left`|Create a new terminal by splitting the current pane container leftward|<kbd>ctrl-shift-\`</kbd> <kbd>Left</kbd>|<kbd>ctrl-shift-\`</kbd> <kbd>Left</kbd>|
-|`terminal:open-split-right`|Create a new terminal by splitting the current pane container rightward|<kbd>ctrl-shift-\`</kbd> <kbd>Right</kbd>|<kbd>ctrl-shift-\`</kbd> <kbd>Right</kbd>|
-|`terminal:run-selected-text`|Run the selected text in the active terminal|<kbd>ctrl-shift-\`</kbd> <kbd>X</kbd>|<kbd>ctrl-shift-\`</kbd> <kbd>X</kbd>|
-|`terminal:insert-selected-text`|Insert the selected text into the active terminal|<kbd>ctrl-shift-\`</kbd> <kbd>I</kbd>|<kbd>ctrl-shift-\`</kbd> <kbd>I</kbd>|
+|`terminal:focus`|Focus the active terminal, or create one if needed|<kbd>Ctrl-\`</kbd>|<kbd>Ctrl-\`</kbd>|
+|`terminal:open`|Create a new terminal in the default location|<kbd>Ctrl-Shift-\`</kbd> <kbd>N</kbd>|<kbd>Ctrl-Shift-\`</kbd> <kbd>N</kbd>|
+|`terminal:open-left-dock`|Create a new terminal in the left dock|<kbd>Ctrl-Shift-\`</kbd> <kbd>L</kbd>|<kbd>Ctrl-Shift-\`</kbd> <kbd>L</kbd>|
+|`terminal:open-right-dock`|Create a new terminal in the right dock|<kbd>Ctrl-Shift-\`</kbd> <kbd>R</kbd>|<kbd>Ctrl-Shift-\`</kbd> <kbd>R</kbd>|
+|`terminal:open-bottom-dock`|Create a new terminal in the bottom dock|<kbd>Ctrl-Shift-\`</kbd> <kbd>B</kbd>|<kbd>Ctrl-Shift-\`</kbd> <kbd>B</kbd>|
+|`terminal:open-split-up`|Create a new terminal by splitting the current pane container upward|<kbd>Ctrl-Shift-\`</kbd> <kbd>Up</kbd>|<kbd>Ctrl-Shift-\`</kbd> <kbd>Up</kbd>|
+|`terminal:open-split-down`|Create a new terminal by splitting the current pane container downward|<kbd>Ctrl-Shift-\`</kbd> <kbd>Down</kbd>|<kbd>Ctrl-Shift-\`</kbd> <kbd>Down</kbd>|
+|`terminal:open-split-left`|Create a new terminal by splitting the current pane container leftward|<kbd>Ctrl-Shift-\`</kbd> <kbd>Left</kbd>|<kbd>Ctrl-Shift-\`</kbd> <kbd>Left</kbd>|
+|`terminal:open-split-right`|Create a new terminal by splitting the current pane container rightward|<kbd>Ctrl-Shift-\`</kbd> <kbd>Right</kbd>|<kbd>Ctrl-Shift-\`</kbd> <kbd>Right</kbd>|
+|`terminal:run-selected-text`|Run the selected text in the active terminal|<kbd>Ctrl-Shift-\`</kbd> <kbd>X</kbd>|<kbd>Ctrl-Shift-\`</kbd> <kbd>X</kbd>|
+|`terminal:insert-selected-text`|Insert the selected text into the active terminal|<kbd>Ctrl-Shift-\`</kbd> <kbd>I</kbd>|<kbd>Ctrl-Shift-\`</kbd> <kbd>I</kbd>|
 
 ### Terminal keybindings
 
@@ -41,12 +41,12 @@ These commands and key bindings can be used when the terminal has focus.
 
 |Command|Description|Keybinding (Linux/Windows)|Keybinding (macOS)|
 |-------|-----------|------------------|-----------------|
-|`terminal:clear`|Clear the screen|<kbd>ctrl-L</kbd>|<kbd>ctrl-L</kbd> or <kbd>cmd-alt-K</kbd>|
-|`terminal:find`|Open the find palette|<kbd>ctrl-F</kbd>|<kbd>cmd-F</kbd>|
-|`terminal:find-next`|Jump to the next match in the find palette|<kbd>F3</kbd>|<kbd>cmd-G</kbd>|
-|`terminal:find-previous`|Jump to the previous match in the find palette|<kbd>shift-F3</kbd>|<kbd>cmd-shift-G</kbd>|
-|`terminal:set-selection-as-find-pattern`|Use the selected terminal text as the search term in the find palette|<kbd>ctrl-E</kbd>|<kbd>cmd-E</kbd>|
-|`terminal:unfocus`|Unfocus the terminal, moving focus to the terminal’s pane container|<kbd>ctrl-\`</kbd> |<kbd>ctrl-\`</kbd>|
+|`terminal:clear`|Clear the screen|<kbd>Ctrl-L</kbd>|<kbd>Ctrl-L</kbd> or <kbd>Cmd-alt-K</kbd>|
+|`terminal:find`|Open the find palette|<kbd>Ctrl-F</kbd>|<kbd>Cmd-F</kbd>|
+|`terminal:find-next`|Jump to the next match in the find palette|<kbd>F3</kbd>|<kbd>Cmd-G</kbd>|
+|`terminal:find-previous`|Jump to the previous match in the find palette|<kbd>Shift-F3</kbd>|<kbd>Cmd-Shift-G</kbd>|
+|`terminal:set-selection-as-find-pattern`|Use the selected terminal text as the search term in the find palette|<kbd>Ctrl-E</kbd>|<kbd>Cmd-E</kbd>|
+|`terminal:unfocus`|Unfocus the terminal, moving focus to the terminal’s pane container|<kbd>Ctrl-\`</kbd> |<kbd>Ctrl-\`</kbd>|
 
 ## Theming
 
@@ -62,15 +62,28 @@ If you use one of the eight built-in syntax themes, your terminal will **automat
 
 If you use a custom syntax theme that doesn’t define these variables, you can use the default fallbacks or define your own colors in your user stylesheet.
 
+Your theme can define terminal colors via [Less](https://lesscss.org/) variables like `@terminal-text-color`, `@terminal-background-color`, and so on. These values have defaults derived from similar color values in your theme, but any theme can customize them.
+
+If you, as a user, want to tweak those values, you should not try to redefine (e.g.) `@terminal-text-color` in your user stylesheet. That won’t have the effect you want — the user stylesheet is purposefully evaluated last, so it won’t be able to change a value that another stylesheet users.
+
+Instead, you can redefine the CSS custom property of the same name. Those custom properties are treated as the source of truth.
+
 These are the default values as defined in `terminal-variables.less`:
 
 ```less
 // This gives you access to Less variables from your syntax theme.
 @import "syntax-variables";
 
-// We use CSS custom properties, not Less variables, because they're
-// late-binding and can more easily be overridden via your stylesheet. But you
-// can still use Less variables as the values!
+// We use CSS custom properties as the source of truth instead of Less
+// variables — because CSS properties are late-binding and can more easily be
+// overridden via your stylesheet. But you can still use Less variables as the
+// values!
+//
+// For simplicity, this example CSS omits the intermediate step where
+// the value is assigned to a Less variable of the same name. For instance,
+// `--terminal-text-color` is actually assigned to `@terminal-text-color` —
+// which itself defaults to `@syntax-text-color` unless your theme specifies
+// otherwise.
 :root {
   // The first block of variables below will by default use equivalent values
   // from your syntax theme. You can still customize these, though, if you don't
@@ -119,7 +132,9 @@ This is an exhaustive list of what can be customized, but it’s more likely you
 @import "syntax-variables";
 :root {
   // Make your "bright cyan" match your ordinary editor text color.
-  --terminal-color-bright-cyan: @syntax-text-color;
+  // The Less `color` function is used here to ensure the value is set in a
+  // format that XTerm.js understands.
+  --terminal-color-bright-cyan: color(@syntax-text-color);
 }
 ```
 
