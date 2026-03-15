@@ -6,9 +6,8 @@ export type TerminalModelOptions = {
 };
 export type Signal = 'SIGTERM' | 'SIGQUIT' | 'SIGINT';
 export declare function isSafeSignal(signal: string): signal is Signal;
-export declare function controlCharacterForSignal(signal: Signal): void;
 /**
- * The representation of a terminal in the Atom workspace.
+ * The representation of a terminal in the Pulsar workspace.
  */
 export declare class TerminalModel {
     #private;

@@ -92,9 +92,11 @@ export class TerminalElement extends HTMLElement {
   public terminal?: XTerminal;
   public pty?: Pty;
   public initialized: boolean = false;
+  public uid: number | undefined = undefined;
 
   private subscriptions = new CompositeDisposable();
   private initializedPromise?: Promise<void>;
+  private createdPromise?: Promise<void>;
   private findPalette?: FindPalette;
 
   // Object that holds the various elements.
@@ -411,6 +413,17 @@ export class TerminalElement extends HTMLElement {
   }
 
   async createTerminal () {
+    if (this.createdPromise) {
+      await this.createdPromise;
+    }
+    this.createdPromise = this.#createTerminal();
+    this.createdPromise.then(() => {
+      this.createdPromise = undefined;
+    });
+    return await this.createdPromise;
+  }
+
+  async #createTerminal () {
     this.setMainBackgroundColor();
 
     // We don't want to start a terminal until the shell environment has been
@@ -527,6 +540,9 @@ export class TerminalElement extends HTMLElement {
       atom.whenShellEnvironmentLoaded(resolve);
     });
     if (timeoutMs > 0) {
+      // TODO: We might want this not to error on timeout; we might want this
+      // to just grow impatient and proceed, since it's not necessarily
+      // catastrophic if the shell environment doesn't load.
       return await timeout(promise, timeoutMs, { tag: 'waitForShellEnvironment' });
     } else {
       return await promise;
@@ -679,6 +695,7 @@ export class TerminalElement extends HTMLElement {
         args: this.#ptyMeta.args,
         options: this.#ptyMeta.options
       });
+      this.uid = this.pty.id;
       if (this.pty.process) {
         this.pty.onData((data) => {
           if (!this.terminal || !this.model || !this.pty) {

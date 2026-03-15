@@ -84,6 +84,7 @@ describe('TerminalElement', () => {
   beforeEach(async () => {
     jasmine.useRealClock();
     await activatePackage();
+    await atom.updateProcessEnvAndTriggerHooks();
 
     atom.config.set('terminal.behavior.promptOnStartup', false);
 
@@ -105,9 +106,20 @@ describe('TerminalElement', () => {
     spyOn(shell, 'openExternal');
     element = await createElement();
     tmpdir = await temp.mkdir();
+
+    // These specs trigger lots of creations and destructions of elements in a
+    // short period of time. This can trigger distracting terminal errors as
+    // idle callbacks run for elements that have been detached. This doesn't
+    // affect the outcome, but it is still annoying.
+    //
+    // Introducing a brief pause in between specs helps avoid this.
+    await wait(50);
   });
 
   afterEach(async () => {
+    // Pause for a tick so that we're not creating and destroying this
+    // element in the same frame.
+    await wait(0);
     while (createdElements.length) {
       let el = createdElements.shift();
       console.log('Destroying element', el.uid, 'with PID:', el.pty?.id);
@@ -210,7 +222,6 @@ describe('TerminalElement', () => {
 
     beforeEach(() => {
       spyOn(Terminal.prototype, 'loadAddon').andCallThrough();
-      console.log('Spied on loadAddon:', Terminal.prototype.loadAddon);
     });
 
     afterEach(() => {

@@ -13,7 +13,7 @@ export default class Terminal {
     static inferTerminalModel(event?: CommandEvent): TerminalModel | undefined;
     static inferTerminalElement(event: CommandEvent): TerminalElement | null;
     static open(uri: string, options?: OpenOptions): Promise<TerminalModel>;
-    static getActiveWorkspaceLocation(): "left" | "right" | "bottom" | "center" | undefined;
+    static getActiveWorkspaceLocation(): "center" | "bottom" | "left" | "right" | undefined;
     static close(): void;
     static restart(event?: CommandEvent): void;
     static copy(event?: CommandEvent): void;
@@ -29,7 +29,7 @@ export default class Terminal {
      *
      * It's risky to allow arbitrary control of a terminal to another package.
      * The `run` method gets around it by prompting the user with the exact
-     * command that was requested to run; this method gets around it by allowing
+     * command that was requested to run. This method gets around it by allowing
      * only one of three signals: `SIGINT`, `SIGQUIT`, or `SIGTERM`.
      */
     static sendSignal(signal: string): Promise<false | undefined>;

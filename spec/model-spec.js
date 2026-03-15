@@ -231,7 +231,7 @@ describe('TerminalModel', () => {
       let spy = jasmine.createSpy('modified-spy');
       let disposable = model.onDidChangeModified(spy);
       model.emitter.emit('did-change-modified', true);
-      expect(spy).toHaveBeenCalledWith(expected);
+      expect(spy).toHaveBeenCalledWith(true);
       disposable.dispose();
     });
   });

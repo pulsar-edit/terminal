@@ -9,10 +9,11 @@ const {
 const DIV = document.createElement('div');
 
 describe('Terminal', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     jasmine.useRealClock();
     document.getElementById('jasmine-content').style.height = '150px';
     activatePackage();
+    await atom.updateProcessEnvAndTriggerHooks();
   });
 
   describe('unfocus()', () => {
@@ -25,7 +26,6 @@ describe('Terminal', () => {
       await wait(500);
       expect(model.element.contains(document.activeElement)).toEqual(true);
       Terminal.unfocus();
-      // debugger;
       expect(model.element.contains(document.activeElement)).toEqual(false);
       model.destroy();
     });
@@ -49,6 +49,7 @@ describe('Terminal', () => {
       };
       spyOn(Terminal, 'getActiveTerminal').andReturn(activeTerminal);
       spyOn(Terminal, 'open').andReturn(newTerminal);
+      spyOn(Terminal, 'canRunCommands').andReturn(Promise.resolve(true));
     });
 
     it('runs commands in a new terminal if configured to do so', async () => {
@@ -141,7 +142,7 @@ describe('Terminal', () => {
 
     it('handles a simple case', async () => {
       await Terminal.open(uri);
-      expect(atom.workspace.open).toHaveBeenCalledWith(uri, {});
+      expect(atom.workspace.open).toHaveBeenCalledWith(uri, { location: 'center' });
     });
 
     it('specifies a cwd if a target is given', async () => {

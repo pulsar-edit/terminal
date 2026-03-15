@@ -34,15 +34,8 @@ export function isSafeSignal (signal: string): signal is Signal {
   return signal === 'SIGTERM' || signal === 'SIGQUIT' || signal === 'SIGINT';
 }
 
-export function  controlCharacterForSignal (signal: Signal) {
-  switch (signal) {
-    case 'SIGTERM':
-      return
-  }
-}
-
 /**
- * The representation of a terminal in the Atom workspace.
+ * The representation of a terminal in the Pulsar workspace.
  */
 export class TerminalModel {
   static is (other: unknown): other is TerminalModel {

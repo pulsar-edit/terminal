@@ -7,8 +7,10 @@ export declare class TerminalElement extends HTMLElement {
     terminal?: XTerminal;
     pty?: Pty;
     initialized: boolean;
+    uid: number | undefined;
     private subscriptions;
     private initializedPromise?;
+    private createdPromise?;
     private findPalette?;
     private div?;
     static create(): TerminalElement;
