@@ -99,14 +99,14 @@ export function getConfigSchema () {
           properties: {
             fallbackEnv: {
               title: 'Fallback',
-              description: `Environment variables that should always be present, even if the environment does not define them. If the shell does define these, the shell’s value will take precedence. (Accepts a stringified JSON object.)`,
+              description: `Environment variables that should always be present, even if the environment does not define them. Any existing value that may be defined in the environment will take precedence. (Accepts a stringified JSON object.)`,
               type: 'string',
               default: '{}',
               order: 6
             },
             overrideEnv: {
               title: 'Overridden',
-              description: `Environment variables that should always be present _and_ take precedence over values that may already be defined in the environment. (Accepts a stringified JSON object.)`,
+              description: `Environment variables that should always be present _and_ take precedence over values that may already be defined in the environment. Will not supersede any variables that are defined during shell startup. (Accepts a stringified JSON object.)`,
               type: 'string',
               default: '{}',
               order: 7

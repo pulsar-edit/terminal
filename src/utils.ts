@@ -108,3 +108,13 @@ export function generateUri (params: Record<string, string> = {}) {
   }
   return url.toString();
 }
+
+export function parseEnvConfigValue (rawJson: string) {
+  let result: Record<string, string>;
+  try {
+    result = JSON.parse(rawJson);
+    return result;
+  } catch (err) {
+    return {};
+  }
+}

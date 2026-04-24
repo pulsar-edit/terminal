@@ -18,3 +18,4 @@ export declare function timeout(promise: Promise<unknown>, timeoutMs?: number, {
 }): Promise<unknown>;
 export declare function debounce(callback: (...args: unknown[]) => void, waitMs?: number): (...args: unknown[]) => void;
 export declare function generateUri(params?: Record<string, string>): string;
+export declare function parseEnvConfigValue(rawJson: string): Record<string, string>;

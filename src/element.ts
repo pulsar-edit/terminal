@@ -21,6 +21,7 @@ import {
   isMac,
   isWindows,
   PACKAGE_NAME,
+  parseEnvConfigValue,
   timeout,
   willUseConPTY,
   windowsBuildNumber
@@ -312,9 +313,12 @@ export class TerminalElement extends HTMLElement {
   getEnv () {
     let env: Record<string, string> = {};
 
-    let fallbackEnv = Config.get('terminal.env.fallbackEnv') ?? {};
-    let overrideEnv = Config.get('terminal.env.overrideEnv') ?? {};
+    let fallbackEnvRaw = Config.get('terminal.env.fallbackEnv') ?? "{}";
+    let overrideEnvRaw = Config.get('terminal.env.overrideEnv') ?? "{}";
     let deleteEnv = Config.get('terminal.env.deleteEnv') ?? [];
+
+    let fallbackEnv = parseEnvConfigValue(fallbackEnvRaw);
+    let overrideEnv = parseEnvConfigValue(overrideEnvRaw);
 
     // First copy over the fallbacks…
     Object.assign(env, fallbackEnv);
