@@ -1,4 +1,3 @@
-
 import {
   CommandEvent,
   CompositeDisposable,
@@ -11,6 +10,7 @@ import { Config, getConfigSchema, possiblySetAutoShell } from './config';
 import { TerminalElement } from './element';
 import { isSafeSignal, TerminalModel } from './model';
 import { BASE_URI, debounce, recalculateActive, generateUri } from './utils';
+import * as Logger from './log';
 
 type OpenOptions = WorkspaceOpenOptions & {
   target?: HTMLElement | EventTarget | null
@@ -29,6 +29,8 @@ export default class Terminal {
     this.activated = true;
     this.subscriptions = new CompositeDisposable();
     this.terminals = new Set();
+
+    Logger.initialize();
 
     // Attempt to detect the correct shell on Windows, but only if we haven't
     // done so on a previous activation.
@@ -586,6 +588,7 @@ export default class Terminal {
 
   static deactivate () {
     this.exitAllTerminals();
+    Logger.destroy();
     this.subscriptions?.dispose();
   }
 
