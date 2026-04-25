@@ -578,6 +578,7 @@ export class TerminalElement extends HTMLElement {
   hideFind () {
     if (!this.terminal || !this.findPalette) return false;
     this.findPalette.hide();
+    this.terminal?.focus();
     return true;
   }
 
