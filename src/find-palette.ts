@@ -91,8 +91,10 @@ export default class FindPalette {
 
   async show () {
     await this.update({ visible: true });
-    this.refs.search.getElement().focus();
-    this.refs.search.selectAll();
+    if (this.refs.search) {
+      this.refs.search.getElement()?.focus();
+      this.refs.search.selectAll();
+    }
   }
 
   hide () {
@@ -102,8 +104,8 @@ export default class FindPalette {
 
   async toggle () {
     await this.update({ visible: !this.visible });
-    if (this.visible) {
-      this.refs.search.getElement().focus();
+    if (this.visible && this.refs.search) {
+      this.refs.search.getElement()?.focus();
       this.refs.search.selectAll();
     }
   }
