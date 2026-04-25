@@ -66,6 +66,33 @@ function keymapHasPendingPartialMatches () {
   return partialMatches.some((kb) => kb.command.startsWith('terminal:'));
 }
 
+// Returns `true` if the given keyboard event matches at least one key binding
+// for this package.
+//
+// This is a heuristic that allows for certain exceptions to xterm.js's
+// aggressive management of keyboard events. Lots of keybindings have some sort
+// of obscure effect in a PTY, and that vastly constrains the set of bindings
+// that can reliably be used to bind to Pulsar commands when the terminal has
+// focus. The way out of that is to register a custom keyboard handler so that
+// we get first dibs on handling any keyboard event.
+//
+// Ideally, more of this work will one day be performed by the `KeymapManager`
+// instance at `atom.keymaps` — which would more easily let us give Pulsar
+// keybindings _in general_ precedence over terminal bindings. But this is
+// enough to get us past the issue of this package not even being able to
+// trigger _some of its own commands_ when the terminal has focus.
+function keyboardEventMatchesKeybinding (event: KeyboardEvent) {
+  let keystroke = atom.keymaps.keystrokeForKeyboardEvent(event);
+
+  // The approach below finds candidates in isolation. This works well for
+  // keybindings, but will not work for key sequences, since we're not
+  // incorporating the `KeymapManager` state in this search. That's why the
+  // approach in the function above still comes in handy.
+  // @ts-ignore Undocumented.
+  let bindings = atom.keymaps.findMatchCandidates([keystroke], []);
+  return bindings.exactMatchCandidates.some((kb: KeyBinding) => kb.command.startsWith('terminal:'));
+}
+
 // Takes a DOM `KeyboardEvent` whose default was already prevented and creates
 // a fresh event so we can re-propagate it upward. This allows certain key
 // bindings and key sequences to keep working even if some of their events are
@@ -446,6 +473,9 @@ export class TerminalElement extends HTMLElement {
       ...this.getXtermOptions()
     });
 
+    // TODO: Harmonize this with the custom key event handler below. This
+    // approach is useful when the last key of a would-be key sequence is
+    // swallowed by xterm.js.
     this.terminal.onKey((event) => {
       // Take keys that were already handled by xterm.js and handle them again
       // in Pulsar.
@@ -496,6 +526,35 @@ export class TerminalElement extends HTMLElement {
 
     this.#searchAddon = new SearchAddon();
     this.terminal.loadAddon(this.#searchAddon);
+
+    // Attach a key event handler so that we get dibs on handling a given key
+    // event before the terminal itself.
+    this.terminal.attachCustomKeyEventHandler((event) => {
+      const hasModifier = event.ctrlKey || event.altKey || event.metaKey;
+
+      // Any event that would produce a character and does not have a
+      // traditional modifier key should definitely be handled by the terminal.
+      // This is an easy way to return quickly for the vast majority of key
+      // events without even spending time consulting `KeymapManager`.
+      if (!hasModifier && event.key) return true;
+
+      // Otherwise, let's see if this event would match any keybindings that
+      // would trigger any commands defined by this package.
+      if (keyboardEventMatchesKeybinding(event)) {
+        // It does, so it's worth preempting xterm.js's own key handling and
+        // allow this event to bubble so Pulsar can handle it.
+        //
+        // This means that a user can bind one of this package's commands to
+        // (e.g.) `Ctrl+C` and shoot themselves in the foot, losing the ability
+        // to send SIGINT. But that would be silly of them!
+        return false;
+      }
+
+      // Everything that doesn't match any of this package's keybindings at
+      // least gets a chance at being handled by xterm.js. Anything that fails
+      // to get handled will bubble up and be handled by Pulsar anyway.
+      return true;
+    });
 
     this.findPalette = new FindPalette(this.#searchAddon);
 
