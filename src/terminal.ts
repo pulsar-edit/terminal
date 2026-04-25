@@ -628,16 +628,24 @@ export default class Terminal {
     this.performOnActiveTerminal(term => term.paste(selection));
   }
 
-  static runSelection () {
+  static async runSelection () {
     let selection = this.getSelectedText();
     if (!selection) return;
-    this.performOnActiveTerminal(term => term.run(selection));
+    this.performOnActiveTerminal(term => term.run(selection), { create: true });
   }
 
-  static performOnActiveTerminal (operation: (term: TerminalModel) => unknown) {
-    let terminal = this.getActiveTerminal();
+  static async performOnActiveTerminal (operation: (term: TerminalModel) => unknown, { create = false }: { create?: boolean } = {}) {
+    let terminal = create ? (await this.getOrCreateActiveTerminal()) : this.getActiveTerminal();
     if (!terminal) return;
     operation(terminal);
+  }
+
+  static async getOrCreateActiveTerminal () {
+    let activeTerminal = this.getActiveTerminal();
+    if (!activeTerminal) {
+      activeTerminal = await this.openTerminal();
+    }
+    return activeTerminal;
   }
 
   static getActiveTerminal () {
