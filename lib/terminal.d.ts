@@ -58,8 +58,11 @@ export default class Terminal {
     }): TerminalModel | undefined;
     static exitAllTerminals(): void;
     static insertSelection(): void;
-    static runSelection(): void;
-    static performOnActiveTerminal(operation: (term: TerminalModel) => unknown): void;
+    static runSelection(): Promise<void>;
+    static performOnActiveTerminal(operation: (term: TerminalModel) => unknown, { create }?: {
+        create?: boolean;
+    }): Promise<void>;
+    static getOrCreateActiveTerminal(): Promise<TerminalModel>;
     static getActiveTerminal(): TerminalModel | undefined;
     static getSelectedText(): string;
     static focus(): void;
