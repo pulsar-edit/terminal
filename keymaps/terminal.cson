@@ -76,7 +76,7 @@
   "ctrl-e": "terminal:use-selection-as-find-pattern"
   # Ordinarily we'd bind an unfocus command to Esc — but Esc in particular
   # seems to stubbornly be claimed by Xterm, even if modifier keys are present!
-  "ctrl-~ u": "terminal:unfocus"
+  "ctrl-`": "terminal:unfocus"
 
 ".platform-win32 .terminal-find-palette atom-text-editor, .platform-linux .terminal-find-palette atom-text-editor":
   # Ensure these shortcuts work equally well whether the terminal or the "find"
