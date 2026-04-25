@@ -3,6 +3,7 @@ import fs from 'fs-extra';
 import { CompositeDisposable, Disposable, KeyBinding } from 'atom';
 import { isSafeSignal, Signal, TerminalModel } from './model';
 import { Config } from './config';
+import * as Logger from './log';
 
 import { ITerminalOptions, ITheme, Terminal as XTerminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
@@ -49,6 +50,41 @@ function clampLineHeight (lineHeight: number, fontSize: number) {
   return roundedScaledLineHeightInPx / (fontSize * window.devicePixelRatio);
 }
 
+// Decides whether a given binding should be prioritized over a hypothetical
+// binding within the terminal for the same key event.
+//
+// This is a heuristic. We don't want to privilege _all_ keybindings!
+function shouldPrioritizeBinding (kb: KeyBinding, ancestorChain?: HTMLElement[]) {
+  if (ancestorChain) {
+    Logger.debug('Considering binding', kb, 'in the context of event target', ancestorChain[0], 'and full ancestor chain:', ancestorChain);
+
+    // Weed out bindings that cannot apply within this DOM context. If this is
+    // a valid binding for this context, our target (or one of its ancestors)
+    // will match the given selector.
+    //
+    // Eventually, we won't need to do this manually, and will instead be able
+    // to ask `atom.keymaps` for this information.
+    if (!ancestorChain.some(node => node?.matches(kb.selector))) return false;
+
+    Logger.log('Prioritizing binding for command', kb.command, 'because our DOM context matches the selector', kb.selector);
+  } else {
+    // We don't have the DOM context to help us make this decision, so let's
+    // use a worse heuristic. We want to privilege our own commands (obviously)
+    // and any `pane:` commands (since it's reasonable to expect them to work
+    // anywhere in the workspace).
+    //
+    // TODO: We can probably figure out the right DOM context anyway;
+    // investigate this.
+    let isPrioritized = kb.command.startsWith('terminal:') || kb.command.startsWith('pane:');
+    if (isPrioritized) {
+      Logger.log('Prioritizing binding for command', kb.command, 'because it matches our whitelist of command prefixes');
+    }
+    return isPrioritized;
+  }
+
+  return true;
+}
+
 // Returns `true` if, at the current moment, Pulsar’s `KeymapManager` has at
 // least one pending keybinding that belongs to one of this package's commands.
 //
@@ -63,7 +99,7 @@ function keymapHasPendingPartialMatches () {
   // @ts-ignore Undocumented
   let partialMatches: KeyBinding[] | null = atom.keymaps.pendingPartialMatches;
   if (!partialMatches) return false;
-  return partialMatches.some((kb) => kb.command.startsWith('terminal:'));
+  return partialMatches.some((kb) => shouldPrioritizeBinding(kb));
 }
 
 // Returns `true` if the given keyboard event matches at least one key binding
@@ -75,6 +111,10 @@ function keymapHasPendingPartialMatches () {
 // that can reliably be used to bind to Pulsar commands when the terminal has
 // focus. The way out of that is to register a custom keyboard handler so that
 // we get first dibs on handling any keyboard event.
+//
+// But that also means we've got to do the work to decide if a given keyboard
+// event _would_ trigger a Pulsar keybinding… without actually triggering the
+// key binding!
 //
 // Ideally, more of this work will one day be performed by the `KeymapManager`
 // instance at `atom.keymaps` — which would more easily let us give Pulsar
@@ -90,7 +130,31 @@ function keyboardEventMatchesKeybinding (event: KeyboardEvent) {
   // approach in the function above still comes in handy.
   // @ts-ignore Undocumented.
   let bindings = atom.keymaps.findMatchCandidates([keystroke], []);
-  return bindings.exactMatchCandidates.some((kb: KeyBinding) => kb.command.startsWith('terminal:'));
+  Logger.debug('Looked for bindings that match', keystroke, 'and found candidates:', bindings);
+
+  if (bindings.exactMatchCandidates.length === 0) return false;
+
+  // The matching bindings have not yet been checked to see if they apply in
+  // this DOM context. So we'll build a list of elements starting with the
+  // target element, then moving upward in the tree and adding each of its
+  // element ancestors. We do this here in order to prevent duplicated work.
+  let target = event.target as HTMLElement | null;
+  if (!target) return false;
+
+  let ancestorChain: HTMLElement[] = [];
+  let node: HTMLElement | null = target;
+  while (node && node.matches) {
+    ancestorChain.push(node);
+    if (node.parentNode === document) break;
+    node = node.parentNode as HTMLElement | null;
+  }
+
+  let result = bindings.exactMatchCandidates.some((kb: KeyBinding) => shouldPrioritizeBinding(kb, ancestorChain));
+
+  if (result) {
+    Logger.log('Assuming control of keybinding:', keystroke, 'because it matches at least one Pulsar binding');
+  }
+  return result;
 }
 
 // Takes a DOM `KeyboardEvent` whose default was already prevented and creates
@@ -530,13 +594,17 @@ export class TerminalElement extends HTMLElement {
     // Attach a key event handler so that we get dibs on handling a given key
     // event before the terminal itself.
     this.terminal.attachCustomKeyEventHandler((event) => {
+      Logger.log('Inspecting key', event.key, 'with raw event:', event);
       const hasModifier = event.ctrlKey || event.altKey || event.metaKey;
 
       // Any event that would produce a character and does not have a
       // traditional modifier key should definitely be handled by the terminal.
       // This is an easy way to return quickly for the vast majority of key
       // events without even spending time consulting `KeymapManager`.
-      if (!hasModifier && event.key) return true;
+      if (!hasModifier && event.charCode) {
+        Logger.debug('This is a simple keyboard event that will produce a character, so we’ll let xterm.js handle it without checking for bindings that match!');
+        return true;
+      }
 
       // Otherwise, let's see if this event would match any keybindings that
       // would trigger any commands defined by this package.
@@ -547,6 +615,7 @@ export class TerminalElement extends HTMLElement {
         // This means that a user can bind one of this package's commands to
         // (e.g.) `Ctrl+C` and shoot themselves in the foot, losing the ability
         // to send SIGINT. But that would be silly of them!
+        Logger.warn('Bypassing xterm.js’s handling of this keyboard event!');
         return false;
       }
 
