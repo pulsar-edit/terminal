@@ -15,7 +15,7 @@ The simplest command is bound to <kbd>Ctrl-\`</kbd> on all platforms: `terminal:
 > [!NOTE]
 > When focus is in a terminal, the terminal itself may handle some keystrokes _instead of_ Pulsar. If you notice that some of your keybindings don’t work inside the terminal, press <kbd>Ctrl-\`</kbd> while the terminal is focused in order to _unfocus_ the terminal; at that point you’ll be able to press any key sequence and have it be interpreted by Pulsar instead of your terminal.
 
-Most of the package’s keybindings rely on a [key sequence](https://docs.pulsar-edit.dev/using-pulsar/basics/#key-sequence): first press the main shortcut (<kbd>Ctrl-Shift-\`</kbd> on all platforms), then press a second key.
+Most of the package’s keybindings rely on a [key sequence](https://docs.pulsar-edit.dev/using-pulsar/basics/#key-sequence): first press the main shortcut (<kbd>Ctrl-~</kbd> on all platforms), then press a second key.
 
 If you want to make any of these commands available via a simpler keybinding, you can [customize your keybindings](https://docs.pulsar-edit.dev/customizing-pulsar/customizing-keybindings/).
 
@@ -24,16 +24,16 @@ If you want to make any of these commands available via a simpler keybinding, yo
 |Command|Description|Keybinding (Linux/Windows)|Keybinding (macOS)|
 |-------|-----------|------------------|-----------------|
 |`terminal:focus`|Focus the active terminal, or create one if needed|<kbd>Ctrl-\`</kbd>|<kbd>Ctrl-\`</kbd>|
-|`terminal:open`|Create a new terminal in the default location|<kbd>Ctrl-Shift-\`</kbd> <kbd>N</kbd>|<kbd>Ctrl-Shift-\`</kbd> <kbd>N</kbd>|
-|`terminal:open-left-dock`|Create a new terminal in the left dock|<kbd>Ctrl-Shift-\`</kbd> <kbd>L</kbd>|<kbd>Ctrl-Shift-\`</kbd> <kbd>L</kbd>|
-|`terminal:open-right-dock`|Create a new terminal in the right dock|<kbd>Ctrl-Shift-\`</kbd> <kbd>R</kbd>|<kbd>Ctrl-Shift-\`</kbd> <kbd>R</kbd>|
-|`terminal:open-bottom-dock`|Create a new terminal in the bottom dock|<kbd>Ctrl-Shift-\`</kbd> <kbd>B</kbd>|<kbd>Ctrl-Shift-\`</kbd> <kbd>B</kbd>|
-|`terminal:open-split-up`|Create a new terminal by splitting the current pane container upward|<kbd>Ctrl-Shift-\`</kbd> <kbd>Up</kbd>|<kbd>Ctrl-Shift-\`</kbd> <kbd>Up</kbd>|
-|`terminal:open-split-down`|Create a new terminal by splitting the current pane container downward|<kbd>Ctrl-Shift-\`</kbd> <kbd>Down</kbd>|<kbd>Ctrl-Shift-\`</kbd> <kbd>Down</kbd>|
-|`terminal:open-split-left`|Create a new terminal by splitting the current pane container leftward|<kbd>Ctrl-Shift-\`</kbd> <kbd>Left</kbd>|<kbd>Ctrl-Shift-\`</kbd> <kbd>Left</kbd>|
-|`terminal:open-split-right`|Create a new terminal by splitting the current pane container rightward|<kbd>Ctrl-Shift-\`</kbd> <kbd>Right</kbd>|<kbd>Ctrl-Shift-\`</kbd> <kbd>Right</kbd>|
-|`terminal:run-selected-text`|Run the selected text in the active terminal|<kbd>Ctrl-Shift-\`</kbd> <kbd>X</kbd>|<kbd>Ctrl-Shift-\`</kbd> <kbd>X</kbd>|
-|`terminal:insert-selected-text`|Insert the selected text into the active terminal|<kbd>Ctrl-Shift-\`</kbd> <kbd>I</kbd>|<kbd>Ctrl-Shift-\`</kbd> <kbd>I</kbd>|
+|`terminal:open`|Create a new terminal in the default location|<kbd>Ctrl-~</kbd> <kbd>N</kbd>|<kbd>Ctrl-~</kbd> <kbd>N</kbd>|
+|`terminal:open-left-dock`|Create a new terminal in the left dock|<kbd>Ctrl-~</kbd> <kbd>L</kbd>|<kbd>Ctrl-~</kbd> <kbd>L</kbd>|
+|`terminal:open-right-dock`|Create a new terminal in the right dock|<kbd>Ctrl-~</kbd> <kbd>R</kbd>|<kbd>Ctrl-~</kbd> <kbd>R</kbd>|
+|`terminal:open-bottom-dock`|Create a new terminal in the bottom dock|<kbd>Ctrl-~</kbd> <kbd>B</kbd>|<kbd>Ctrl-~</kbd> <kbd>B</kbd>|
+|`terminal:open-split-up`|Create a new terminal by splitting the current pane container upward|<kbd>Ctrl-~</kbd> <kbd>Up</kbd>|<kbd>Ctrl-~</kbd> <kbd>Up</kbd>|
+|`terminal:open-split-down`|Create a new terminal by splitting the current pane container downward|<kbd>Ctrl-~</kbd> <kbd>Down</kbd>|<kbd>Ctrl-~</kbd> <kbd>Down</kbd>|
+|`terminal:open-split-left`|Create a new terminal by splitting the current pane container leftward|<kbd>Ctrl-~</kbd> <kbd>Left</kbd>|<kbd>Ctrl-~</kbd> <kbd>Left</kbd>|
+|`terminal:open-split-right`|Create a new terminal by splitting the current pane container rightward|<kbd>Ctrl-~</kbd> <kbd>Right</kbd>|<kbd>Ctrl-~</kbd> <kbd>Right</kbd>|
+|`terminal:run-selected-text`|Run the selected text in the active terminal|<kbd>Ctrl-~</kbd> <kbd>X</kbd>|<kbd>Ctrl-~</kbd> <kbd>X</kbd>|
+|`terminal:insert-selected-text`|Insert the selected text into the active terminal|<kbd>Ctrl-~</kbd> <kbd>I</kbd>|<kbd>Ctrl-~</kbd> <kbd>I</kbd>|
 
 ### Terminal keybindings
 
