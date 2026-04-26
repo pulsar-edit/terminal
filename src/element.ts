@@ -50,11 +50,23 @@ function clampLineHeight (lineHeight: number, fontSize: number) {
   return roundedScaledLineHeightInPx / (fontSize * window.devicePixelRatio);
 }
 
+const SUPPORTED_PREFIXES = [
+  'terminal:',
+  'pane:'
+];
+
 // Decides whether a given binding should be prioritized over a hypothetical
 // binding within the terminal for the same key event.
 //
 // This is a heuristic. We don't want to privilege _all_ keybindings!
 function shouldPrioritizeBinding (kb: KeyBinding, ancestorChain?: HTMLElement[]) {
+  // For now, until we can better predict which binding will claim a given key
+  // event, we'll maintain a whitelist of allowed command prefixes. Otherwise
+  // we end up being far too aggressive — e.g., always claiming `Enter` because
+  // it's bound to `core:confirm`.
+  if (!SUPPORTED_PREFIXES.some(prefix => kb.command.startsWith(prefix))) {
+    return;
+  }
   if (ancestorChain) {
     Logger.debug('Considering binding', kb, 'in the context of event target', ancestorChain[0], 'and full ancestor chain:', ancestorChain);
 
@@ -68,18 +80,10 @@ function shouldPrioritizeBinding (kb: KeyBinding, ancestorChain?: HTMLElement[])
 
     Logger.log('Prioritizing binding for command', kb.command, 'because our DOM context matches the selector', kb.selector);
   } else {
-    // We don't have the DOM context to help us make this decision, so let's
-    // use a worse heuristic. We want to privilege our own commands (obviously)
-    // and any `pane:` commands (since it's reasonable to expect them to work
-    // anywhere in the workspace).
-    //
-    // TODO: We can probably figure out the right DOM context anyway;
-    // investigate this.
-    let isPrioritized = kb.command.startsWith('terminal:') || kb.command.startsWith('pane:');
-    if (isPrioritized) {
-      Logger.log('Prioritizing binding for command', kb.command, 'because it matches our whitelist of command prefixes');
-    }
-    return isPrioritized;
+    // We don't have the DOM context to help us make this decision, so we'll
+    // let this through on the strength of the command prefix matching.
+    Logger.log('Prioritizing binding for command', kb.command, 'because it matches our whitelist of command prefixes');
+    return true;
   }
 
   return true;
