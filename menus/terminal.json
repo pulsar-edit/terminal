@@ -49,31 +49,31 @@
               },
               {
                 "label": "Split Up",
-                "command": "terminal:open-up-context-menu"
+                "command": "terminal:open-split-up-context-menu"
               },
               {
                 "label": "Split Down",
-                "command": "terminal:open-down-context-menu"
+                "command": "terminal:open-split-down-context-menu"
               },
               {
                 "label": "Split Left",
-                "command": "terminal:open-left-context-menu"
+                "command": "terminal:open-split-left-context-menu"
               },
               {
                 "label": "Split Right",
-                "command": "terminal:open-right-context-menu"
+                "command": "terminal:open-split-right-context-menu"
               },
               {
                 "label": "Bottom Dock",
-                "command": "terminal:open-bottom-dock-context-menu"
+                "command": "terminal:open-split-bottom-dock-context-menu"
               },
               {
                 "label": "Left Dock",
-                "command": "terminal:open-left-dock-context-menu"
+                "command": "terminal:open-split-left-dock-context-menu"
               },
               {
                 "label": "Right Dock",
-                "command": "terminal:open-right-dock-context-menu"
+                "command": "terminal:open-split-right-dock-context-menu"
               }
             ]
           },
