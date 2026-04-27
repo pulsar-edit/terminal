@@ -2,6 +2,7 @@ import commonjs from '@rollup/plugin-commonjs';
 import resolve from '@rollup/plugin-node-resolve';
 import json from '@rollup/plugin-json';
 import typescript from '@rollup/plugin-typescript';
+import { resolve as resolvePath } from 'path';
 
 // This is a preset Rollup configuration file designed for Pulsar community
 // packages written in TypeScript. Here's what it gives us:
@@ -52,6 +53,27 @@ export default [{
     preserveModulesRoot: 'src'
   },
   plugins: [
+    // TEMP: `@xterm/addon-ligatures` is currently half-broken in that it
+    // advertises a `main` field in its `package.json` (and does not specify
+    // `type: "module"`) yet the `main` field points to a nonexistent path.
+    // Rollup infers that this package supports CommonJS and automatically
+    // treats it as external, even if we don't include it in the `externals`
+    // list below, because of our `commonjs` plugin config. So it's doomed to
+    // fail to be `require`d at runtime.
+    //
+    // In order to get Rollup _not_ to treat this package as external, we must
+    // manually point it to the package's `module` entry. That's what this
+    // temporary "plugin" does. Ideally we won't need this fix for long.
+    //
+    // Issue: https://github.com/xtermjs/xterm.js/issues/5822
+    {
+      name: 'fix-addon-ligatures',
+      resolveId (id) {
+        if (id === '@xterm/addon-ligatures') {
+          return resolvePath('node_modules/@xterm/addon-ligatures/lib/addon-ligatures.mjs');
+        }
+      },
+    },
     resolve({
       extensions: ['.js', '.ts', '.json'],
       preferBuiltins: true,
@@ -82,7 +104,7 @@ export default [{
     '@electron/remote',
     '@xterm/addon-web-links',
     '@xterm/addon-fit',
-    '@xterm/addon-ligatures',
+    // '@xterm/addon-ligatures',
     '@xterm/addon-search',
     '@xterm/addon-webgl',
     '@xterm/xterm',
