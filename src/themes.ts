@@ -213,6 +213,10 @@ export function getTheme (): ITheme {
       colors.brightMagenta = root.getPropertyValue("--terminal-color-bright-magenta");
       colors.brightCyan = root.getPropertyValue("--terminal-color-bright-cyan");
       colors.brightWhite = root.getPropertyValue("--terminal-color-bright-white");
+
+      colors.scrollbarSliderBackground = root.getPropertyValue('--terminal-scrollbar-color');
+      colors.scrollbarSliderHoverBackground = root.getPropertyValue('--terminal-scrollbar-color');
+      colors.scrollbarSliderActiveBackground = root.getPropertyValue('--terminal-scrollbar-color');
       break;
     }
     case 'Config':
