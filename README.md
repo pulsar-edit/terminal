@@ -21,6 +21,13 @@ If you want to make any of these commands available via a simpler keybinding, yo
 
 ### Workspace keybindings
 
+> [!NOTE]
+> In US QWERTY layouts, <kbd>\`</kbd> and <kbd>\~</kbd> are assigned to the key above <kbd>Tab</kbd>. Hence <kbd>Ctrl-\~</kbd> in the table below can be read as <kbd>Ctrl-Shift-\`</kbd> for US QWERTY users.
+>
+> In other locales with other keyboard layouts, however, these symbols will rarely share a key. If you’ve got such a layout, you can [rebind these commands](https://docs.pulsar-edit.dev/customizing-pulsar/customizing-keybindings/) to match the symbols assigned to the key above <kbd>Tab</kbd>.
+>
+> In time, we hope to make this unnecessary by making it possible for keymaps to bind directly to certain keyboard keys in layout-independent fashion.
+
 |Command|Description|Keybinding (Linux/Windows)|Keybinding (macOS)|
 |-------|-----------|------------------|-----------------|
 |`terminal:focus`|Focus the active terminal, or create one if needed|<kbd>Ctrl-\`</kbd>|<kbd>Ctrl-\`</kbd>|
