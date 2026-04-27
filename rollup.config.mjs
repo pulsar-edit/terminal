@@ -3,6 +3,7 @@ import resolve from '@rollup/plugin-node-resolve';
 import json from '@rollup/plugin-json';
 import typescript from '@rollup/plugin-typescript';
 import { resolve as resolvePath } from 'path';
+import { readFileSync } from 'fs';
 
 // This is a preset Rollup configuration file designed for Pulsar community
 // packages written in TypeScript. Here's what it gives us:
@@ -65,12 +66,23 @@ export default [{
     // manually point it to the package's `module` entry. That's what this
     // temporary "plugin" does. Ideally we won't need this fix for long.
     //
+    // Since the transpiled output would ordinarily be placed in
+    // `lib/node_modules`, it would be ignored by version control; hence we
+    // also do some magic to get it to show up at a different path. If we
+    // needed to transpile any other modules, this would be a major headache,
+    // so we should fix this another way should the need arise.
+    //
     // Issue: https://github.com/xtermjs/xterm.js/issues/5822
     {
       name: 'fix-addon-ligatures',
       resolveId (id) {
         if (id === '@xterm/addon-ligatures') {
-          return resolvePath('node_modules/@xterm/addon-ligatures/lib/addon-ligatures.mjs');
+          return `\0addon-ligatures`;
+        }
+      },
+      load (id) {
+        if (id === '\0addon-ligatures') {
+          return readFileSync(resolvePath('node_modules/@xterm/addon-ligatures/lib/addon-ligatures.mjs'), 'utf8');
         }
       },
     },
