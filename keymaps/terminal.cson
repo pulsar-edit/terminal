@@ -73,7 +73,7 @@
   "ctrl-f": "terminal:find"
   "f3": "terminal:find-next"
   "shift-f3": "terminal:find-previous"
-  "ctrl-e": "terminal:use-selection-as-find-pattern"
+  "ctrl-e": "terminal:set-selection-as-find-pattern"
   # Ordinarily we'd bind an unfocus command to Esc — but Esc in particular
   # seems to stubbornly be claimed by Xterm, even if modifier keys are present!
   "ctrl-`": "terminal:unfocus"
