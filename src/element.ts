@@ -50,117 +50,6 @@ function clampLineHeight (lineHeight: number, fontSize: number) {
   return roundedScaledLineHeightInPx / (fontSize * window.devicePixelRatio);
 }
 
-const SUPPORTED_PREFIXES = [
-  'terminal:',
-  'pane:'
-];
-
-// Decides whether a given binding should be prioritized over a hypothetical
-// binding within the terminal for the same key event.
-//
-// This is a heuristic. We don't want to privilege _all_ keybindings!
-function shouldPrioritizeBinding (kb: KeyBinding, ancestorChain?: HTMLElement[]) {
-  // For now, until we can better predict which binding will claim a given key
-  // event, we'll maintain a whitelist of allowed command prefixes. Otherwise
-  // we end up being far too aggressive — e.g., always claiming `Enter` because
-  // it's bound to `core:confirm`.
-  if (!SUPPORTED_PREFIXES.some(prefix => kb.command.startsWith(prefix))) {
-    return;
-  }
-  if (ancestorChain) {
-    Logger.debug('Considering binding', kb, 'in the context of event target', ancestorChain[0], 'and full ancestor chain:', ancestorChain);
-
-    // Weed out bindings that cannot apply within this DOM context. If this is
-    // a valid binding for this context, our target (or one of its ancestors)
-    // will match the given selector.
-    //
-    // Eventually, we won't need to do this manually, and will instead be able
-    // to ask `atom.keymaps` for this information.
-    if (!ancestorChain.some(node => node?.matches(kb.selector))) return false;
-
-    Logger.log('Prioritizing binding for command', kb.command, 'because our DOM context matches the selector', kb.selector);
-  } else {
-    // We don't have the DOM context to help us make this decision, so we'll
-    // let this through on the strength of the command prefix matching.
-    Logger.log('Prioritizing binding for command', kb.command, 'because it matches our whitelist of command prefixes');
-    return true;
-  }
-
-  return true;
-}
-
-// Returns `true` if, at the current moment, Pulsar’s `KeymapManager` has at
-// least one pending keybinding that belongs to one of this package's commands.
-//
-// We use this to decide whether we should re-propagate a keyboard event that
-// xterm.js already swallowed. If we don't do this, `KeymapManager` gets
-// confused, especially since it'll still receive the `keyup` event for the key
-// the user just pressed.
-//
-// TODO: This might make sense to apply universally, not just where `terminal:`
-// commands are involved. But this is a cautious first step.
-function keymapHasPendingPartialMatches () {
-  // @ts-ignore Undocumented
-  let partialMatches: KeyBinding[] | null = atom.keymaps.pendingPartialMatches;
-  if (!partialMatches) return false;
-  return partialMatches.some((kb) => shouldPrioritizeBinding(kb));
-}
-
-// Returns `true` if the given keyboard event matches at least one key binding
-// for this package.
-//
-// This is a heuristic that allows for certain exceptions to xterm.js's
-// aggressive management of keyboard events. Lots of keybindings have some sort
-// of obscure effect in a PTY, and that vastly constrains the set of bindings
-// that can reliably be used to bind to Pulsar commands when the terminal has
-// focus. The way out of that is to register a custom keyboard handler so that
-// we get first dibs on handling any keyboard event.
-//
-// But that also means we've got to do the work to decide if a given keyboard
-// event _would_ trigger a Pulsar keybinding… without actually triggering the
-// key binding!
-//
-// Ideally, more of this work will one day be performed by the `KeymapManager`
-// instance at `atom.keymaps` — which would more easily let us give Pulsar
-// keybindings _in general_ precedence over terminal bindings. But this is
-// enough to get us past the issue of this package not even being able to
-// trigger _some of its own commands_ when the terminal has focus.
-function keyboardEventMatchesKeybinding (event: KeyboardEvent) {
-  let keystroke = atom.keymaps.keystrokeForKeyboardEvent(event);
-
-  // The approach below finds candidates in isolation. This works well for
-  // keybindings, but will not work for key sequences, since we're not
-  // incorporating the `KeymapManager` state in this search. That's why the
-  // approach in the function above still comes in handy.
-  // @ts-ignore Undocumented.
-  let bindings = atom.keymaps.findMatchCandidates([keystroke], []);
-  Logger.debug('Looked for bindings that match', keystroke, 'and found candidates:', bindings);
-
-  if (bindings.exactMatchCandidates.length === 0) return false;
-
-  // The matching bindings have not yet been checked to see if they apply in
-  // this DOM context. So we'll build a list of elements starting with the
-  // target element, then moving upward in the tree and adding each of its
-  // element ancestors. We do this here in order to prevent duplicated work.
-  let target = event.target as HTMLElement | null;
-  if (!target) return false;
-
-  let ancestorChain: HTMLElement[] = [];
-  let node: HTMLElement | null = target;
-  while (node && node.matches) {
-    ancestorChain.push(node);
-    if (node.parentNode === document) break;
-    node = node.parentNode as HTMLElement | null;
-  }
-
-  let result = bindings.exactMatchCandidates.some((kb: KeyBinding) => shouldPrioritizeBinding(kb, ancestorChain));
-
-  if (result) {
-    Logger.log('Assuming control of keybinding:', keystroke, 'because it matches at least one Pulsar binding');
-  }
-  return result;
-}
-
 // Takes a DOM `KeyboardEvent` whose default was already prevented and creates
 // a fresh event so we can re-propagate it upward. This allows certain key
 // bindings and key sequences to keep working even if some of their events are
@@ -204,6 +93,7 @@ export class TerminalElement extends HTMLElement {
   #terminalInitiallyVisible: boolean = false;
   #fitAddon?: FitAddon;
   #searchAddon?: SearchAddon;
+  #prioritizedPrefixes: string[] = [];
 
   // Metadata about the PTY.
   #ptyMeta: Partial<{
@@ -307,6 +197,12 @@ export class TerminalElement extends HTMLElement {
             this.terminal.options.fontSize = newValue;
             this.refitTerminal();
           }
+        ),
+        atom.config.observe(
+          'terminal.behavior.prioritizedCommands',
+          (newValue: string[]) => {
+            this.#prioritizedPrefixes = newValue;
+          }
         )
       );
 
@@ -369,6 +265,102 @@ export class TerminalElement extends HTMLElement {
 
   getTerminalType () {
     return Config.get('terminal.terminalType');
+  }
+
+  #shouldPrioritizeBinding (kb: KeyBinding, ancestorChain?: HTMLElement[]) {
+    let matchesPrioritizedPrefix = this.#prioritizedPrefixes.some(prefix => {
+      if (prefix.endsWith(':')) return kb.command.startsWith(prefix);
+      else return kb.command === prefix;
+    });
+    if (!matchesPrioritizedPrefix) return false;
+    if (ancestorChain) {
+      Logger.debug('Considering binding', kb, 'in the context of event target', ancestorChain[0], 'and full ancestor chain:', ancestorChain);
+
+      // Weed out bindings that cannot apply within this DOM context. If this is
+      // a valid binding for this context, our target (or one of its ancestors)
+      // will match the given selector.
+      //
+      // Eventually, we won't need to do this manually, and will instead be able
+      // to ask `atom.keymaps` for this information.
+      if (!ancestorChain.some(node => node?.matches(kb.selector))) return false;
+
+      Logger.log('Prioritizing binding for command', kb.command, 'because our DOM context matches the selector', kb.selector);
+    } else {
+      // We don't have the DOM context to help us make this decision, so we'll
+      // let this through on the strength of the command prefix matching.
+      Logger.log('Prioritizing binding for command', kb.command, 'because it matches our whitelist of command prefixes');
+      return true;
+    }
+    return true;
+  }
+
+  // Returns `true` if, at the current moment, Pulsar’s `KeymapManager` has at
+  // least one pending keybinding that belongs to one of this package's commands.
+  //
+  // We use this to decide whether we should re-propagate a keyboard event that
+  // xterm.js already swallowed. If we don't do this, `KeymapManager` gets
+  // confused, especially since it'll still receive the `keyup` event for the key
+  // the user just pressed.
+  #keymapHasPendingPartialMatches () {
+    // @ts-ignore Undocumented
+    let partialMatches: KeyBinding[] | null = atom.keymaps.pendingPartialMatches;
+    if (!partialMatches) return false;
+    return partialMatches.some((kb) => this.#shouldPrioritizeBinding(kb));
+  }
+
+  // Returns `true` if the given keyboard event matches at least one key binding
+  // for this package.
+  //
+  // This is a heuristic that allows for certain exceptions to xterm.js's
+  // aggressive management of keyboard events. Lots of keybindings have some sort
+  // of obscure effect in a PTY, and that vastly constrains the set of bindings
+  // that can reliably be used to bind to Pulsar commands when the terminal has
+  // focus. The way out of that is to register a custom keyboard handler so that
+  // we get first dibs on handling any keyboard event.
+  //
+  // But that also means we've got to do the work to decide if a given keyboard
+  // event _would_ trigger a Pulsar keybinding… without actually triggering the
+  // key binding!
+  //
+  // Ideally, more of this work will one day be performed by the `KeymapManager`
+  // instance at `atom.keymaps` — which would more easily let us give Pulsar
+  // keybindings _in general_ precedence over terminal bindings. But this is
+  // enough to get us past the issue of this package not even being able to
+  // trigger _some of its own commands_ when the terminal has focus.
+  #keyboardEventMatchesKeybinding (event: KeyboardEvent) {
+    let keystroke = atom.keymaps.keystrokeForKeyboardEvent(event);
+
+    // The approach below finds candidates in isolation. This works well for
+    // keybindings, but will not work for key sequences, since we're not
+    // incorporating the `KeymapManager` state in this search. That's why the
+    // approach in the function above still comes in handy.
+    // @ts-ignore Undocumented.
+    let bindings = atom.keymaps.findMatchCandidates([keystroke], []);
+    Logger.debug('Looked for bindings that match', keystroke, 'and found candidates:', bindings);
+
+    if (bindings.exactMatchCandidates.length === 0) return false;
+
+    // The matching bindings have not yet been checked to see if they apply in
+    // this DOM context. So we'll build a list of elements starting with the
+    // target element, then moving upward in the tree and adding each of its
+    // element ancestors. We do this here in order to prevent duplicated work.
+    let target = event.target as HTMLElement | null;
+    if (!target) return false;
+
+    let ancestorChain: HTMLElement[] = [];
+    let node: HTMLElement | null = target;
+    while (node && node.matches) {
+      ancestorChain.push(node);
+      if (node.parentNode === document) break;
+      node = node.parentNode as HTMLElement | null;
+    }
+
+    let result = bindings.exactMatchCandidates.some((kb: KeyBinding) => this.#shouldPrioritizeBinding(kb, ancestorChain));
+
+    if (result) {
+      Logger.log('Assuming control of keybinding:', keystroke, 'because it matches at least one Pulsar binding');
+    }
+    return result;
   }
 
   // Ensures the given path exists and points to a valid directory on disk.
@@ -565,7 +557,7 @@ export class TerminalElement extends HTMLElement {
       // Right now, we act very cautiously and only redispatch keyboard events
       // if we think that doing so might complete a pending match _related to
       // one of this package's commands_.
-      if (keymapHasPendingPartialMatches()) {
+      if (this.#keymapHasPendingPartialMatches()) {
         redispatchKeyboardEvent(event.domEvent, this);
       }
     });
@@ -620,7 +612,7 @@ export class TerminalElement extends HTMLElement {
 
       // Otherwise, let's see if this event would match any keybindings that
       // would trigger any commands defined by this package.
-      if (keyboardEventMatchesKeybinding(event)) {
+      if (this.#keyboardEventMatchesKeybinding(event)) {
         // It does, so it's worth preempting xterm.js's own key handling and
         // allow this event to bubble so Pulsar can handle it.
         //

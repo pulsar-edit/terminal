@@ -204,6 +204,13 @@ export declare function getConfigSchema(): {
                 default: string;
                 order: number;
             };
+            prioritizedCommands: {
+                title: string;
+                description: string;
+                type: string;
+                default: string[];
+                order: number;
+            };
             runInActive: {
                 title: string;
                 description: string;
