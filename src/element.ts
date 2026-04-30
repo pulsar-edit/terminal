@@ -460,6 +460,14 @@ export class TerminalElement extends HTMLElement {
   getXtermOptions () {
     let xtermOptions: ITerminalOptions = {
       cursorBlink: true,
+      overviewRuler: {
+        showTopBorder: true,
+        showBottomBorder: true,
+        // `.vertical-scrollbar` for editors is hard-coded to be 15px. This
+        // isn't native like that scrollbar is, but we can at least make it
+        // occupy similar dimensions.
+        width: 15
+      },
       ...this.getExtraXTermOptions()
     };
     let fontFamilyKey = Config.get('appearance.useEditorFontFamily') ?

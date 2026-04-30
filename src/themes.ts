@@ -225,6 +225,18 @@ export function getTheme (): ITheme {
     default:
       console.warn(`[terminal] Unrecognized theme value: ${theme}`)
   }
+  // We set the `overviewRuler.width` option when we create the terminal
+  // because that also governs the width of the scrollbar. But doing so causes
+  // the overview ruler to appear. The easiest way to make it disappear is to
+  // theme its border color to match the background color.
+  colors.overviewRulerBorder = colors.background;
+
+  // Set a CSS custom property with a value that matches the actual background
+  // color we're assigning to the terminal. This value is useful to have in the
+  // stylesheet, and `--terminal-background-color` won't agree with reality
+  // if the user opts into a legacy theme or applies theme overrides via
+  // config.
+  document.documentElement.style.setProperty('--terminal-internal-operative-background-color', colors.background);
   return colors;
 }
 

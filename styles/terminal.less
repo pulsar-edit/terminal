@@ -7,6 +7,10 @@
 pulsar-terminal {
   display: flex;
   flex-direction: column;
+  // Somehow setting a z-index here appears to solve an issue where the entire
+  // terminal (most visibly the scrollbar thumb) appears _atop_ the button that
+  // shows/hides the right dock.
+  z-index: 1;
 }
 
 .terminal__main {
@@ -99,9 +103,20 @@ pulsar-terminal {
 @import (less) "../node_modules/@xterm/xterm/css/xterm.css";
 
 .xterm-viewport {
-  background-color: color(@terminal-background-color) !important;
+  background-color: var(--terminal-internal-operative-background-color) !important;
   &::-webkit-scrollbar-track {
     background: inherit;
+  }
+}
+
+.xterm-scrollable-element {
+  .scrollbar > .slider {
+    border-radius: 12px;
+    // Reduce the apparent width of the scrollbar thumb relative to the track —
+    // without reducing its actual width and thereby making it harder to click
+    // on. This is about right for matching native scrollbars on my macOS
+    // machine, but we might want to open it up to user configuration.
+    border: 2.5px solid var(--terminal-internal-operative-background-color) !important;
   }
 }
 
