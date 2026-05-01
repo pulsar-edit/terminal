@@ -71,7 +71,7 @@ If you use a custom syntax theme that doesn’t define these variables, you can 
 
 Your theme can define terminal colors via [Less](https://lesscss.org/) variables like `@terminal-text-color`, `@terminal-background-color`, and so on. These values have defaults derived from similar color values in your theme, but any theme can customize them.
 
-If you, as a user, want to tweak those values, you should not try to redefine (e.g.) `@terminal-text-color` in your user stylesheet. That won’t have the effect you want — the user stylesheet is purposefully evaluated last, so it won’t be able to change a value that another stylesheet users.
+If you, as a user, want to tweak those values, you should not try to redefine (e.g.) `@terminal-text-color` in your user stylesheet. That won’t have the effect you want — the user stylesheet is purposefully evaluated last, so it won’t be able to change a value that another stylesheet uses.
 
 Instead, you can redefine the CSS custom property of the same name. Those custom properties are treated as the source of truth.
 
