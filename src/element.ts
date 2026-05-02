@@ -590,8 +590,9 @@ export class TerminalElement extends HTMLElement {
       this.terminal.loadAddon(new WebglAddon());
     }
 
-    this.terminal.loadAddon(new LigaturesAddon());
-
+    if (Config.get('xterm.ligatures')) {
+      this.terminal.loadAddon(new LigaturesAddon());
+    }
     this.#searchAddon = new SearchAddon();
     this.terminal.loadAddon(this.#searchAddon);
 

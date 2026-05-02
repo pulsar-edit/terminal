@@ -98,6 +98,13 @@ export declare function getConfigSchema(): {
                 order: number;
                 default: boolean;
             };
+            ligatures: {
+                title: string;
+                description: string;
+                type: string;
+                order: number;
+                default: boolean;
+            };
             additionalOptions: {
                 title: string;
                 description: string;
