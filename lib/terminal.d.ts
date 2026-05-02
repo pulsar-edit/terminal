@@ -1,8 +1,9 @@
-import { CommandEvent, CompositeDisposable, Pane, WorkspaceOpenOptions } from 'atom';
+import { CommandEvent, CompositeDisposable, Dock, Pane, WorkspaceCenter, WorkspaceOpenOptions } from 'atom';
 import { TerminalElement } from './element';
 import { TerminalModel } from './model';
 type OpenOptions = WorkspaceOpenOptions & {
     target?: HTMLElement | EventTarget | null;
+    cwd?: string;
 };
 export default class Terminal {
     static subscriptions: CompositeDisposable;
@@ -13,7 +14,7 @@ export default class Terminal {
     static inferTerminalModel(event?: CommandEvent): TerminalModel | undefined;
     static inferTerminalElement(event: CommandEvent): TerminalElement | null;
     static open(uri: string, options?: OpenOptions): Promise<TerminalModel>;
-    static getActiveWorkspaceLocation(): "center" | "bottom" | "left" | "right" | undefined;
+    static getActiveWorkspaceLocation(activeContainer?: Dock | WorkspaceCenter): "center" | "bottom" | "left" | "right" | undefined;
     static close(): void;
     static restart(event?: CommandEvent): void;
     static copy(event?: CommandEvent): void;
@@ -69,7 +70,7 @@ export default class Terminal {
     static focusNext(): void;
     static focusPrevious(): void;
     static unfocus(): void;
-    static generateUri(): string;
+    static generateUri(params?: Record<string, string>): string;
     static provideTerminalService(): {
         run: (commands: string[]) => Promise<boolean>;
         open: () => Promise<TerminalModel>;

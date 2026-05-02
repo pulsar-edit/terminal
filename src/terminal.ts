@@ -2,8 +2,10 @@ import {
   CommandEvent,
   CompositeDisposable,
   Disposable,
+  Dock,
   Pane,
   TextEditorElement,
+  WorkspaceCenter,
   WorkspaceOpenOptions
 } from  'atom';
 import { Config, getConfigSchema, possiblySetAutoShell } from './config';
@@ -13,8 +15,23 @@ import { BASE_URI, debounce, recalculateActive, generateUri } from './utils';
 import * as Logger from './log';
 
 type OpenOptions = WorkspaceOpenOptions & {
-  target?: HTMLElement | EventTarget | null
+  target?: HTMLElement | EventTarget | null;
+  cwd?: string;
 };
+
+type WorkspaceOpenLocation = Exclude<WorkspaceOpenOptions['location'], undefined>;
+
+const VALID_LOCATIONS = [
+  'center',
+  'left',
+  'right',
+  'bottom'
+];
+
+function isValidLocation(str: string): str is WorkspaceOpenLocation {
+  if (str === undefined) return false;
+  return VALID_LOCATIONS.includes(str);
+}
 
 export default class Terminal {
 
@@ -35,6 +52,39 @@ export default class Terminal {
     // Attempt to detect the correct shell on Windows, but only if we haven't
     // done so on a previous activation.
     possiblySetAutoShell();
+
+    // Some context-menu commands open a terminal via split. If any of them are
+    // invoked from the tree view, ensure the splits target the workspace
+    // center rather than the left/right dock.
+    //
+    // Also, if we're invoking from the tree view, ensure we set the right
+    // directory as the `cwd`.
+    function resolveOptionsForContextMenuSplit (target: EventTarget | null | undefined): OpenOptions {
+      let result: OpenOptions = {};
+      if (!(target instanceof HTMLElement)) return result;
+      if (target?.closest('.tree-view')) {
+        result.target = atom.workspace.getActiveTextEditor()?.getElement();
+        let li = target.closest('li[is="tree-view-directory"]');
+        if (li) {
+          result.cwd = li.querySelector<HTMLSpanElement>('[data-path]')?.dataset?.path
+        }
+      } else {
+        let paneContainerElement = target.closest<HTMLElement>('atom-pane-container, atom-panel-container');
+        if (paneContainerElement) {
+          if (paneContainerElement.matches('atom-panel-container')) {
+            let location = paneContainerElement.className;
+            if (isValidLocation(location)) {
+              result.location = location;
+            }
+          } else {
+            // Must be an `atom-pane-container`, meaning it's the workspace
+            // center.
+            result.location = 'center';
+          }
+        }
+      }
+      return result;
+    }
 
     this.subscriptions.add(
       // Register a view provider for the terminal emulator.
@@ -93,7 +143,7 @@ export default class Terminal {
           this.close();
         },
         'terminal:open-center': () => {
-          this.openInCenterOrDock(atom.workspace);
+          this.openInCenterOrDock(atom.workspace.getCenter());
         },
         'terminal:open-split-up': () => {
           this.open(this.generateUri(), { split: 'up' });
@@ -193,59 +243,84 @@ export default class Terminal {
         }
       }),
 
+      // Commands for the right-click context menu.
+      //
+      // Invocations from the tree view have special behavior. If we can infer
+      // a project path, we'll use that as the `cwd` for the new terminal.
+      //
+      // Invocations from within an editor will use the active file's directory
+      // (if applicable) as `cwd`, falling back to the project root.
       atom.commands.add("atom-text-editor, .tree-view, .tab-bar", {
         "terminal:open-context-menu": {
           hiddenInCommandPalette: true,
           didDispatch: ({ target }) => {
-            this.open(this.generateUri(), this.addDefaultPosition({ target }));
+            let { cwd, ...opts } = resolveOptionsForContextMenuSplit(target);
+            let uri = cwd ? this.generateUri({ cwd }) : this.generateUri();
+            this.open(uri, this.addDefaultPosition({ ...opts, target }));
           }
         },
         "terminal:open-center-context-menu": {
           hiddenInCommandPalette: true,
           didDispatch: ({ target }) => {
-            this.openInCenterOrDock(atom.workspace, { target });
+            let { cwd, ...opts } = resolveOptionsForContextMenuSplit(target);
+            let uri = cwd ? this.generateUri({ cwd }) : this.generateUri();
+            this.open(uri, { ...opts, location: 'center' });
           }
         },
         "terminal:open-split-up-context-menu": {
           hiddenInCommandPalette: true,
           didDispatch: ({ target }) => {
-            this.open(this.generateUri(), { split: "up", target });
+            let { cwd, ...opts } = resolveOptionsForContextMenuSplit(target);
+            let uri = cwd ? this.generateUri({ cwd }) : this.generateUri();
+            this.open(uri, { split: "up", ...opts, location: 'center' });
           }
         },
         "terminal:open-split-down-context-menu": {
           hiddenInCommandPalette: true,
           didDispatch: ({ target }) => {
-            this.open(this.generateUri(), { split: "down", target });
+            let { cwd, ...opts } = resolveOptionsForContextMenuSplit(target);
+            let uri = cwd ? this.generateUri({ cwd }) : this.generateUri();
+            this.open(uri, { split: "down", ...opts, location: "center" });
           }
         },
         "terminal:open-split-left-context-menu": {
           hiddenInCommandPalette: true,
           didDispatch: ({ target }) => {
-            this.open(this.generateUri(), { split: "left", target });
+            let { cwd, ...opts } = resolveOptionsForContextMenuSplit(target);
+            let uri = cwd ? this.generateUri({ cwd }) : this.generateUri();
+            this.open(uri, { split: "left", ...opts, location: "center" });
           }
         },
         "terminal:open-split-right-context-menu": {
           hiddenInCommandPalette: true,
           didDispatch: ({ target }) => {
-            this.open(this.generateUri(), { split: "right", target });
+            let { cwd, ...opts } = resolveOptionsForContextMenuSplit(target);
+            let uri = cwd ? this.generateUri({ cwd }) : this.generateUri();
+            this.open(uri, { split: "right", ...opts, location: "center" });
           }
         },
         "terminal:open-split-bottom-dock-context-menu": {
           hiddenInCommandPalette: true,
           didDispatch: ({ target }) => {
-            this.openInCenterOrDock(atom.workspace.getBottomDock(), { target });
+            let { cwd, ...opts } = resolveOptionsForContextMenuSplit(target);
+            let uri = cwd ? this.generateUri({ cwd }) : this.generateUri();
+            this.open(uri, { ...opts, location: "bottom" });
           }
         },
         "terminal:open-split-left-dock-context-menu": {
           hiddenInCommandPalette: true,
           didDispatch: ({ target }) => {
-            this.openInCenterOrDock(atom.workspace.getLeftDock(), { target });
+            let { cwd, ...opts } = resolveOptionsForContextMenuSplit(target);
+            let uri = cwd ? this.generateUri({ cwd }) : this.generateUri();
+            this.open(uri, { ...opts, location: "left" });
           }
         },
         "terminal:open-split-right-dock-context-menu": {
           hiddenInCommandPalette: true,
           didDispatch: ({ target }) => {
-            this.openInCenterOrDock(atom.workspace.getRightDock(), { target });
+            let { cwd, ...opts } = resolveOptionsForContextMenuSplit(target);
+            let uri = cwd ? this.generateUri({ cwd }) : this.generateUri();
+            this.open(uri, { ...opts, location: "right" });
           }
         },
       })
@@ -314,11 +389,13 @@ export default class Terminal {
       }
     }
 
+    console.log('Opening with options:', options, url.href);
+
     return await atom.workspace.open(url.href, options) as Promise<TerminalModel>;
   }
 
-  static getActiveWorkspaceLocation() {
-    let activeContainer = atom.workspace.getActivePaneContainer();
+  static getActiveWorkspaceLocation(activeContainer?: Dock | WorkspaceCenter) {
+    activeContainer ??= atom.workspace.getActivePaneContainer();
     switch (activeContainer) {
       case atom.workspace.getCenter():
         return 'center';
@@ -489,14 +566,28 @@ export default class Terminal {
     return true;
   }
 
+  // TODO: This approach can be vastly simplified.
   static async openInCenterOrDock (
     centerOrDock: { getActivePane(): Pane },
-    options: OpenOptions = {}
+    options: OpenOptions = {},
   ) {
-    let pane = centerOrDock.getActivePane();
-    if (pane) options.pane = pane;
-
-    return await this.open(this.generateUri(), options);
+    let location: WorkspaceOpenOptions['location'] = undefined;
+    switch (centerOrDock) {
+      case atom.workspace.getBottomDock():
+        location = 'bottom';
+      case atom.workspace.getLeftDock():
+        location = 'left';
+      case atom.workspace.getRightDock():
+        location = 'right';
+      case atom.workspace.getCenter():
+        location = 'center';
+      default:
+        location = undefined;
+    }
+    options.location ??= location;
+    let { cwd, ...opts } = options;
+    let uri = cwd ? this.generateUri({ cwd }): this.generateUri();
+    return await this.open(uri, opts);
   }
 
   // Given an element that the user clicked on, attempt to infer a path.
@@ -718,8 +809,8 @@ export default class Terminal {
     atom.views.getView(atom.workspace).focus();
   }
 
-  static generateUri() {
-    return generateUri();
+  static generateUri(params: Record<string, string> = {}) {
+    return generateUri(params);
   }
 
   // SERVICES
