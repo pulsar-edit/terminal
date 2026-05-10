@@ -1,11 +1,12 @@
 import fs from 'fs-extra';
+import { fileURLToPath } from 'url';
 
 import { CompositeDisposable, Disposable, KeyBinding } from 'atom';
 import { isSafeSignal, Signal, TerminalModel } from './model';
 import { Config } from './config';
 import * as Logger from './log';
 
-import { ITerminalOptions, ITheme, Terminal as XTerminal } from '@xterm/xterm';
+import { IBuffer, IBufferCellPosition, IBufferRange, ILinkHandler, ITerminalOptions, ITheme, IViewportRange, Terminal as XTerminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { WebglAddon } from '@xterm/addon-webgl';
@@ -72,6 +73,51 @@ function redispatchKeyboardEvent(originalEvent: KeyboardEvent, targetElement: Ev
   targetElement.dispatchEvent(newEvent);
 }
 
+type TerminalLinkHandlerOptions = {
+  activate(event: MouseEvent, text: string, range?: IBufferRange): unknown;
+  hover(event: MouseEvent, text: string, range?: IBufferRange | IViewportRange, rangeType?: 'buffer' | 'viewport'): unknown;
+  leave(event: MouseEvent, text: string, range?: IBufferRange): unknown;
+}
+
+/**
+ * A link handler class designed to fulfill both the interfaces related to link
+ * handling (even though they differ from one another very slightly).
+ */
+class TerminalLinkHandler implements ILinkHandler {
+  allowNonHttpProtocols = true;
+
+  options: TerminalLinkHandlerOptions;
+
+  constructor (options: TerminalLinkHandlerOptions) {
+    this.options = options;
+  }
+
+  activate(event: MouseEvent, text: string, range: IBufferRange): void {
+    this.activateWithOptionalRange(event, text, range);
+  }
+
+  hover(event: MouseEvent, text: string, range: IBufferRange): void {
+    this.hoverWithOptionalRange(event, text, range, 'buffer');
+  }
+
+  leave(event: MouseEvent, text: string, range: IBufferRange): void {
+    this.leaveWithOptionalRange(event, text, range);
+  }
+
+  activateWithOptionalRange (event: MouseEvent, text: string, range?: IBufferRange) {
+    return this.options.activate(event, text, range);
+  }
+
+  hoverWithOptionalRange (event: MouseEvent, text: string, range?: IBufferRange | IViewportRange, rangeType?: 'buffer' | 'viewport') {
+    return this.options.hover?.(event, text, range, rangeType);
+  }
+
+  leaveWithOptionalRange (event: MouseEvent, text: string, range?: IBufferRange) {
+    return this.options.leave?.(event, text, range);
+  }
+}
+
+
 export class TerminalElement extends HTMLElement {
   public model?: TerminalModel;
   public terminal?: XTerminal;
@@ -83,6 +129,12 @@ export class TerminalElement extends HTMLElement {
   private initializedPromise?: Promise<void>;
   private createdPromise?: Promise<void>;
   private findPalette?: FindPalette;
+  private tooltip?: CompositeDisposable;
+  private tooltipRange?: IBufferRange;
+  private tooltipHideTimer?: NodeJS.Timeout;
+
+  private linkHandler: TerminalLinkHandler;
+  private cursorPosition?: IBuffer;
 
   // Object that holds the various elements.
   private div?: Record<'top' | 'main' | 'menu' | 'terminal' | 'palette', HTMLDivElement>;
@@ -107,6 +159,15 @@ export class TerminalElement extends HTMLElement {
 
   static create () {
     return document.createElement('pulsar-terminal') as TerminalElement;
+  }
+
+  constructor () {
+    super();
+    this.linkHandler = new TerminalLinkHandler({
+      activate: (event, text, range) => this.activateLink(event, text, range),
+      hover: (event, text, range) => this.hoverLink(event, text, range),
+      leave: (event, text, range) => this.leaveLink(event, text, range)
+    });
   }
 
   async initialize (model: TerminalModel) {
@@ -239,6 +300,214 @@ export class TerminalElement extends HTMLElement {
   // to accept text.
   async ready () {
     return await this.initializedPromise;
+  }
+
+  activateLink (event: MouseEvent, uri: string, _range?: IBufferRange) {
+    if (Config.get('behavior.requireModifierToOpenUrls')) {
+      let modifier = isMac() ? event.metaKey : event.ctrlKey;
+      if (!modifier) {
+        // Users get warned the first time they try to click a link without
+        // holding a modifier… but only the first time.
+        this.optionallyWarnAboutModifierlessClick();
+        return;
+      }
+    }
+
+    if (!uri.startsWith('file:')) {
+      // This is a URL, most likely. Hand it off to the system for opening in
+      // the user's default browser.
+      shell.openExternal(uri);
+    }
+
+    // If we get this far, we're dealing with a file path. The way we respond
+    // to various paths depends upon the user's configuration.
+    const behavior = Config.get('behavior.hyperlinkPathBehavior');
+    const openDirectoriesInPulsar = behavior === 'all-pulsar';
+    const openFilesInPulsar = behavior === 'all-pulsar' ||
+      behavior === 'dir-explorer-file-pulsar';
+
+    // Convert the `file://` URL to the format expected by Node APIs.
+    let linkPath = fileURLToPath(uri);
+
+    // Nonexistent file paths don't have anything to handle.
+    if (!fs.existsSync(linkPath)) return;
+
+    // Decide what to do with this hyperlink based on configuration and
+    // whether the link points to a file or a directory.
+    let isDir = fs.lstatSync(linkPath).isDirectory();
+    let shouldOpenInPulsar = isDir ? openDirectoriesInPulsar : openFilesInPulsar;
+    if (shouldOpenInPulsar) {
+      this.openInPulsar(uri, isDir);
+    } else if (isDir) {
+      // The behavior of `shell.openExternal` for a directory will open a
+      // file explorer to the directory in question so the user can view its
+      // contents.
+      shell.openExternal(uri);
+    } else {
+      // We want to open the file's parent directory in the file explorer and
+      // select this specific file.
+      shell.showItemInFolder(uri);
+    }
+  }
+
+  hoverLink (_event: MouseEvent, uri: string, range?: IBufferRange | IViewportRange, _rangeType?: 'buffer' | 'viewport') {
+    if (!this.terminal) return;
+
+    // Upon first hover, we're prone to trigger a `leave` and an almost
+    // immediate `hover`. This might be the result of temporary confusion after
+    // the empty anchor element is created and placed underneath the mouse
+    // pointer.
+    //
+    // But whatever the cause, it means we're doing a sort of debouncing here.
+    // If we're in the second of two rapid calls to `hover`, then there will be
+    // an existing tooltip we want to preserve. We do a range comparison to
+    // distinguish this case from the case where you move directly from one
+    // hyperlinked range to another.
+    if (range) {
+      if (this.rangesAreEqual(range, this.tooltipRange) && this.tooltip && this.tooltipHideTimer) {
+        // We already showed a tooltip at this position just a moment ago and
+        // have not yet removed it. Keep it active!
+        Logger.log('Keeping existing tooltip!', this.inspectRange(range));
+        clearTimeout(this.tooltipHideTimer);
+        this.tooltipHideTimer = undefined;
+      } else {
+        let reason = '';
+        if (!this.tooltip) {
+          reason = 'because tooltip does not exist';
+        } else if (!this.tooltipHideTimer) {
+          reason = 'because we are not scheduled to hide one';
+        } else {
+          reason = 'because range changed';
+        }
+        Logger.warn('Making new tooltip for range', this.inspectRange(range), reason, `(Last range: ${this.inspectRange(this.tooltipRange)})`);
+        this.removeCurrentTooltip(true);
+
+        // To create the decoration that serves as our tooltip anchor element,
+        // we must first create a marker on the correct row. This marker is
+        // placed relative to where the cursor is right now.
+        //
+        // This information is not a lot of fun to retrieve! And we must
+        // account for scenarios where the cursor is off screen because we've
+        // scrolled up in the viewport.
+        let {
+          // This seems to correlate to the row offset that the cursor has
+          // _if_ the viewport is scrolled all the way to the bottom.
+          cursorY,
+          // This seems to correlate to how many lines are offscreen _if_ the
+          // viewport is scrolled all the way to the bottom.
+          baseY
+        } = this.cursorPosition ?? { cursorY: 0, baseY: 0 };
+
+        // Add those values together and you get the absolute position of the
+        // row the cursor occupies in the buffer. Now we can place our marker
+        // relative to the cursor.
+        //
+        // Oddly, even though hovering over a URL theoretically produces an
+        // `IViewportRange` rather than an `IBufferRange`, it does not seem to
+        // affect the math here.
+        let markerY = range.start.y - (cursorY + baseY) - 1;
+        Logger.debug(`Placed marker on row:`, markerY, 'given range starting at', range.start.y, 'and cursorY', cursorY, 'and baseY', baseY);
+        let marker = this.terminal.registerMarker(markerY);
+        let decoration = this.terminal.registerDecoration({
+          x: range.start.x - 1,
+          marker,
+          width: range.end.y === range.start.y ? (range.end.x - range.start.x + 1) : 1
+        });
+        this.tooltip = new CompositeDisposable();
+        this.tooltip.add(new Disposable(() => {
+          decoration?.dispose();
+          marker?.dispose();
+        }));
+        let originalTooltip = this.tooltip;
+        decoration?.onRender((elem) => {
+          // Guard against an old decoration trying to render.
+          if (this.tooltip !== originalTooltip) {
+            return;
+          }
+          this.tooltip?.add(this.addTooltip(elem, uri));
+        });
+      }
+
+      this.tooltipRange = range;
+    }
+
+    // TODO: Ideally, we would prevent the link from being underlined on hover
+    // _if_ configuration is such that a modifier key must be held down to open
+    // a link. To do this in XTerm.js, we'd have to implement our own link
+    // provider _instead of_ WebLinksAddon, so this is annoying.
+    //
+    // Even worse: that'd only work for URLs in the terminal, and not for OSC 8
+    // hyperlinks (for which there is no easy way to accomplish this either).
+
+  }
+
+  leaveLink (event: MouseEvent, uri: string, range?: IBufferRange) {
+    Logger.debug('#leave', uri, event, range);
+    this.removeCurrentTooltip();
+  }
+
+  addTooltip (element: HTMLElement, tooltipText: string) {
+    let range = this.tooltipRange;
+    if (!range) return new Disposable(() => {});
+    // If the range starts and ends on the same row, we can use `trigger:
+    // 'hover'` and rely on `TooltipManager` to manage our tooltip delay.
+    //
+    // But if the range spans multiple rows, we cannot guarantee that the
+    // element we create will be under the pointer, since we don't know which
+    // part of the range the user is mousing over. So we'll do `trigger:
+    // 'manual'` in order to guarantee that the tooltip appears even when we
+    // aren't hovering over the anchor element.
+    //
+    // This means we don't get the delay behavior, but it's better than
+    // nothing.
+    //
+    // TODO: Either (a) determine which buffer line the mouse pointer is over
+    // so that we can guarantee the creation of a decoration on that line; or
+    // (b) use `trigger: 'manual'` 100% of the time and manually manage the
+    // show delay the way we manage the hide delay later.
+    let trigger = range.start.y === range.end.y ? 'hover' as const : 'manual' as const;
+    return atom.tooltips.add(element, {
+      title: tooltipText,
+      trigger,
+      delay: { show: 1000, hide: 100 }
+    });
+  }
+
+  // Schedule the removal of the current tooltip — or remove it immediately.
+  removeCurrentTooltip (immediate = false) {
+    if (this.tooltipHideTimer) {
+      clearTimeout(this.tooltipHideTimer);
+    }
+    if (immediate) {
+      this.tooltip?.dispose();
+      this.tooltipHideTimer = undefined;
+      return;
+    }
+    this.tooltipHideTimer = setTimeout(() => {
+      this.tooltip?.dispose();
+      clearTimeout(this.tooltipHideTimer);
+      this.tooltipHideTimer = undefined;
+    }, 100);
+  }
+
+  // Open the given URI within Pulsar.
+  //
+  // Exact behavior varies according to the user's configuration.
+  async openInPulsar (uri: string, isDirectory: boolean = false) {
+    let linkPath = fileURLToPath(uri);
+    let contains = atom.project.contains(linkPath);
+    if (isDirectory) {
+      if (!contains) {
+        // TODO: Open a new project for this folder.
+      } else {
+        // We can't reveal this item in the tree view programmatically… yet!
+        // But that is the goal.
+      }
+    } else {
+      // Whether the path within the project or outside of it, we'll open it
+      // for editing in this window.
+      await atom.workspace.open(linkPath);
+    }
   }
 
   getModel () {
@@ -452,13 +721,15 @@ export class TerminalElement extends HTMLElement {
   getXtermOptions () {
     let xtermOptions: ITerminalOptions = {
       cursorBlink: true,
-      overviewRuler: {
-        showTopBorder: true,
-        showBottomBorder: true,
+      scrollbar: {
         // `.vertical-scrollbar` for editors is hard-coded to be 15px. This
         // isn't native like that scrollbar is, but we can at least make it
         // occupy similar dimensions.
-        width: 15
+        width: 15,
+        overviewRuler: {
+          showTopBorder: true,
+          showBottomBorder: true,
+        },
       },
       ...this.getExtraXTermOptions()
     };
@@ -536,10 +807,15 @@ export class TerminalElement extends HTMLElement {
     // wait for the shell before proceeding.
     await this.waitForShellEnvironment();
 
-    this.terminal = new XTerminal({
+    let options = {
+      ...this.getXtermOptions(),
       allowProposedApi: true,
-      ...this.getXtermOptions()
-    });
+      linkHandler: this.linkHandler,
+    };
+
+    Logger.debug('Declaring new Terminal with options:', options);
+
+    this.terminal = new XTerminal(options);
 
     // TODO: Harmonize this with the custom key event handler below. This
     // approach is useful when the last key of a would-be key sequence is
@@ -567,16 +843,11 @@ export class TerminalElement extends HTMLElement {
 
     if (Config.get('xterm.webLinks')) {
       this.terminal.loadAddon(
-        new WebLinksAddon(
-          (event, uri) => {
-            if (Config.get('behavior.requireModifierToOpenUrls')) {
-              let modifier = isMac() ? event.metaKey : event.ctrlKey;
-              if (!modifier) {
-                this.optionallyWarnAboutModifierlessClick();
-                return;
-              }
-            }
-            shell.openExternal(uri);
+        new WebLinksAddon(this.activateLink.bind(this), {
+            hover: (event, text, location) => {
+              this.linkHandler.hoverWithOptionalRange(event, text, location, 'viewport');
+            },
+            leave: this.linkHandler.leaveWithOptionalRange.bind(this.linkHandler)
           }
         )
       );
@@ -596,6 +867,7 @@ export class TerminalElement extends HTMLElement {
         console.warn('terminal.xterm.webgl is true, but platform does not support WebGL');
       }
       if (webglAddon) {
+        webglAddon.onContextLoss(() => webglAddon.dispose());
         this.terminal.loadAddon(webglAddon);
       }
     }
@@ -659,6 +931,11 @@ export class TerminalElement extends HTMLElement {
         if (this.isPtyProcessRunning()) {
           this.pty!.write(data);
         }
+      }),
+
+      this.terminal.onCursorMove(() => {
+        if (!this.terminal) return;
+        this.cursorPosition = this.terminal.buffer.active;
       }),
 
       // When the user selects text, we might want to automatically copy it to
@@ -976,6 +1253,24 @@ export class TerminalElement extends HTMLElement {
   show () {
     if (!this.div) return;
     this.div.terminal.style.visibility = 'visible';
+  }
+
+  pointsAreEqual (a: IBufferCellPosition, b: IBufferCellPosition) {
+    return a.x === b.x && a.y === b.y;
+  }
+
+  rangesAreEqual (a: IBufferRange | undefined, b: IBufferRange | undefined) {
+    if (!a || !b) return a === b;
+    return this.pointsAreEqual(a.start, b.start) && this.pointsAreEqual(a.end, b.end);
+  }
+
+  inspectPoint (cell: IBufferCellPosition) {
+    return `(${cell.x}, ${cell.y})`;
+  }
+
+  inspectRange (range: IBufferRange | undefined) {
+    if (!range) return `(undefined)`;
+    return `${this.inspectPoint(range.start)} - ${this.inspectPoint(range.end)}`;
   }
 }
 
