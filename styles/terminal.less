@@ -110,17 +110,24 @@ pulsar-terminal {
 }
 
 .xterm-scrollable-element {
-  .xterm-scrollbar.xterm-visible > .xterm-slider {
-    border-radius: 12px;
-    // Reduce the apparent width of the scrollbar thumb relative to the track —
-    // without reducing its actual width and thereby making it harder to click
-    // on. This is about right for matching native scrollbars on my macOS
-    // machine, but we might want to open it up to user configuration.
-    border: 2.5px solid var(--terminal-internal-operative-background-color) !important;
+  .xterm-scrollbar.xterm-visible,
+  .scrollbar.visible {
+    & > .xterm-slider,
+    & > .slider {
+      border-radius: 12px;
+      // Reduce the apparent width of the scrollbar thumb relative to the track —
+      // without reducing its actual width and thereby making it harder to click
+      // on. This is about right for matching native scrollbars on my macOS
+      // machine, but we might want to open it up to user configuration.
+      border: 2.5px solid var(--terminal-internal-operative-background-color) !important;
+    }
   }
 
-  .xterm-scrollbar.xterm-invisible > .xterm-slider {
-    background: transparent !important;
+  .xterm-scrollbar.xterm-invisible, .scrollbar.invisible {
+    & > .xterm-slider,
+    & > .slider {
+      background: transparent !important;
+    }
   }
 }
 
