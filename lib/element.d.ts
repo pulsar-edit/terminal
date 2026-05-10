@@ -1,5 +1,6 @@
+import { Disposable } from 'atom';
 import { Signal, TerminalModel } from './model';
-import { ITerminalOptions, ITheme, Terminal as XTerminal } from '@xterm/xterm';
+import { IBufferCellPosition, IBufferRange, ITerminalOptions, ITheme, IViewportRange, Terminal as XTerminal } from '@xterm/xterm';
 import { Pty } from './pty';
 export declare class TerminalElement extends HTMLElement {
     #private;
@@ -12,10 +13,22 @@ export declare class TerminalElement extends HTMLElement {
     private initializedPromise?;
     private createdPromise?;
     private findPalette?;
+    private tooltip?;
+    private tooltipRange?;
+    private tooltipHideTimer?;
+    private linkHandler;
+    private cursorPosition?;
     private div?;
     static create(): TerminalElement;
+    constructor();
     initialize(model: TerminalModel): Promise<void>;
     ready(): Promise<void | undefined>;
+    activateLink(event: MouseEvent, uri: string, _range?: IBufferRange): void;
+    hoverLink(_event: MouseEvent, uri: string, range?: IBufferRange | IViewportRange, _rangeType?: 'buffer' | 'viewport'): void;
+    leaveLink(event: MouseEvent, uri: string, range?: IBufferRange): void;
+    addTooltip(element: HTMLElement, tooltipText: string): Disposable;
+    removeCurrentTooltip(immediate?: boolean): void;
+    openInPulsar(uri: string, isDirectory?: boolean): Promise<void>;
     getModel(): TerminalModel | undefined;
     destroy(): void;
     getShellCommand(): any;
@@ -52,4 +65,8 @@ export declare class TerminalElement extends HTMLElement {
     selectAll(): void;
     hide(): void;
     show(): void;
+    pointsAreEqual(a: IBufferCellPosition, b: IBufferCellPosition): boolean;
+    rangesAreEqual(a: IBufferRange | undefined, b: IBufferRange | undefined): boolean;
+    inspectPoint(cell: IBufferCellPosition): string;
+    inspectRange(range: IBufferRange | undefined): string;
 }

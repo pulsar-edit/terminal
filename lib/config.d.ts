@@ -253,6 +253,17 @@ export declare function getConfigSchema(): {
                 default: boolean;
                 order: number;
             };
+            hyperlinkPathBehavior: {
+                title: string;
+                description: string;
+                type: string;
+                enum: {
+                    value: string;
+                    label: string;
+                }[];
+                default: string;
+                order: number;
+            };
         };
     };
     advanced: {
