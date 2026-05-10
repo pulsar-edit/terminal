@@ -3,6 +3,17 @@ import which from 'which';
 import { PACKAGE_NAME, isMac, isWindows } from './utils';
 import { THEME_COLORS } from './themes';
 
+function getExplorerString () {
+  if (process.platform === 'win32') {
+    return 'Windows Explorer';
+  } else if (process.platform === 'darwin') {
+    return 'Finder';
+  }
+  return 'File Explorer';
+}
+
+const EXPLORER = getExplorerString();
+
 export class Config {
   static get (keyName?: string) {
     if (!keyName) {
@@ -343,6 +354,31 @@ export function getConfigSchema () {
           type: 'boolean',
           default: true,
           order: 8
+        },
+        hyperlinkPathBehavior: {
+          title: 'Hyperlink Behavior for Paths',
+          description: `How to open an OSC 8 hyperlink if it links to a path on disk.`,
+          // If directories are handled by Pulsar, clicking on a directory _within_ the current project will reveal it in the tree view; clicking on a directory _outside_ the current project will open a new window for that project.
+          type: 'string',
+          enum: [
+            // TODO: The "All in Pulsar" option will have to wait until the
+            // `tree-view` service gets some more features.
+            //
+            // {
+            //   value: 'all-pulsar',
+            //   label: 'All in Pulsar'
+            // },
+            {
+              value: 'all-explorer',
+              label: `All in ${EXPLORER}`
+            },
+            {
+              value: 'dir-explorer-file-pulsar',
+              label: `Directories in ${EXPLORER}, files in Pulsar`
+            },
+          ],
+          default: 'dir-explorer-file-pulsar',
+          order: 9
         }
       }
     },
