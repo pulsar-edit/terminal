@@ -721,15 +721,10 @@ export class TerminalElement extends HTMLElement {
   getXtermOptions () {
     let xtermOptions: ITerminalOptions = {
       cursorBlink: true,
-      scrollbar: {
-        // `.vertical-scrollbar` for editors is hard-coded to be 15px. This
-        // isn't native like that scrollbar is, but we can at least make it
-        // occupy similar dimensions.
+      overviewRuler: {
         width: 15,
-        overviewRuler: {
-          showTopBorder: true,
-          showBottomBorder: true,
-        },
+        showTopBorder: true,
+        showBottomBorder: true,
       },
       ...this.getExtraXTermOptions()
     };
