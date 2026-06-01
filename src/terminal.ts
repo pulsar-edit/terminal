@@ -575,12 +575,16 @@ export default class Terminal {
     switch (centerOrDock) {
       case atom.workspace.getBottomDock():
         location = 'bottom';
+        break;
       case atom.workspace.getLeftDock():
         location = 'left';
+        break;
       case atom.workspace.getRightDock():
         location = 'right';
+        break;
       case atom.workspace.getCenter():
         location = 'center';
+        break;
       default:
         location = undefined;
     }
