@@ -4,6 +4,7 @@ import json from '@rollup/plugin-json';
 import typescript from '@rollup/plugin-typescript';
 import { resolve as resolvePath } from 'path';
 import { readFileSync } from 'fs';
+import { writeBuildHash } from './scripts/build-hash.mjs';
 
 // This is a preset Rollup configuration file designed for Pulsar community
 // packages written in TypeScript. Here's what it gives us:
@@ -160,7 +161,8 @@ export default [{
       declaration: false,
       declarationMap: false
     }),
-    json()
+    json(),
+    writeBuildHash()
   ],
   // Mark certain packages as external; this tells Rollup not to try to
   // transpile or bundle this package's code. CommonJS modules should

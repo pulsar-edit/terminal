@@ -18,7 +18,7 @@
   "scripts": {
     "build": "rollup -c rollup.config.mjs",
     "watch": "rollup --watch -c rollup.config.mjs",
-    "prepare": "npm run build",
+    "prepare": "node ./scripts/check-build-hash.mjs || npm run build",
     "prepublishOnly": "npm run build"
   },
   "repository": "https://github.com/pulsar-edit/terminal",
