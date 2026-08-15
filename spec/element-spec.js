@@ -415,6 +415,23 @@ describe('TerminalElement', () => {
       await wait(150); // longer than the 100ms hide delay
       expect(tooltip.dispose).toHaveBeenCalled();
     });
+
+    it('cancels the pending removal if the mouse re-enters the same link before the hide delay elapses', async () => {
+      let range = makeTerminalRange(1, 1, 5, 1);
+      let disposable = jasmine.createSpyObj('disposable', ['dispose']);
+      spyOn(atom.tooltips, 'add').andReturn(disposable);
+
+      element.hoverLink(new MouseEvent('mouseover'), 'file:///foo', range);
+      await waitFor(() => atom.tooltips.add.callCount > 0);
+
+      element.leaveLink(new MouseEvent('mouseout'), 'file:///foo', range);
+      // Same range: should cancel the pending hide.
+      element.hoverLink(new MouseEvent('mouseover'), 'file:///foo', range);
+
+      await wait(200);
+      expect(disposable.dispose).not.toHaveBeenCalled();
+      expect(atom.tooltips.add.callCount).toBe(1);
+    });
   });
 
   describe('rangesAreEqual()', () => {
