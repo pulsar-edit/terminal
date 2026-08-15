@@ -10,7 +10,8 @@ const { Pty } = require('../lib/pty');
 
 const {
   activatePackage,
-  wait
+  wait,
+  waitFor
 } = require('./helpers');
 
 const path = require('path');
@@ -364,7 +365,7 @@ describe('TerminalElement', () => {
     });
   });
 
-  fdescribe('hoverLink() / leaveLink()', () => {
+  describe('hoverLink() / leaveLink()', () => {
     // This behavior is hard to test! We do it by constructing artificial
     // ranges that XTerm.js understands. (Its "range" data structure is similar
     // to ours, but not identical.)
@@ -392,12 +393,14 @@ describe('TerminalElement', () => {
       expect(element.tooltip).toBe(firstTooltip);
     });
 
-    it('creates a new tooltip when the range changes', () => {
+    it('creates a new tooltip when the range changes', async () => {
       let rangeA = makeTerminalRange(1, 1, 5, 1);
       let rangeB = makeTerminalRange(1, 2, 5, 2);
       element.hoverLink(new MouseEvent('mouseover'), 'file:///foo', rangeA);
+      await waitFor(() => !!element.tooltip);
       let firstTooltip = element.tooltip;
       element.hoverLink(new MouseEvent('mouseover'), 'file:///bar', rangeB);
+      await waitFor(() => !!element.tooltip);
       expect(element.tooltip).not.toBe(firstTooltip);
     });
 
@@ -405,6 +408,7 @@ describe('TerminalElement', () => {
       jasmine.useRealClock();
       let range = makeTerminalRange(1, 1, 5, 1);
       element.hoverLink(new MouseEvent('mouseover'), 'file:///foo', range);
+      await waitFor(() => !!element.tooltip);
       let tooltip = element.tooltip;
       spyOn(tooltip, 'dispose').andCallThrough();
       element.leaveLink(new MouseEvent('mouseout'), 'file:///foo', range);

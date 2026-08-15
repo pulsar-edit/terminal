@@ -19,8 +19,23 @@ async function wait (ms) {
   return new Promise(r => setTimeout(r, ms));
 }
 
+async function waitFor (conditionFn, intervalMs = 50, timeoutMs = 5000) {
+  let startedAt = Date.now();
+  let satisfied = false;
+  satisfied = !!conditionFn();
+  while (!satisfied) {
+    let now = Date.now();
+    if (now - startedAt > timeoutMs) {
+      throw new Error(`Timeout of ${timeoutMs} exceeded`);
+    }
+    await wait(intervalMs);
+    satisfied = !!conditionFn();
+  }
+}
+
 module.exports = {
   activatePackage,
   addToPackagePaths,
-  wait
+  wait,
+  waitFor
 };

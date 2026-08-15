@@ -6,7 +6,7 @@ import { isSafeSignal, Signal, TerminalModel } from './model';
 import { Config } from './config';
 import * as Logger from './log';
 
-import { IBuffer, IBufferCellPosition, IBufferRange, ILinkHandler, ITerminalOptions, ITheme, IViewportRange, Terminal as XTerminal } from '@xterm/xterm';
+import { IBufferCellPosition, IBufferRange, ILinkHandler, ITerminalOptions, ITheme, IViewportRange, Terminal as XTerminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { WebglAddon } from '@xterm/addon-webgl';
@@ -79,6 +79,173 @@ type TerminalLinkHandlerOptions = {
   leave(event: MouseEvent, text: string, range?: IBufferRange): unknown;
 }
 
+type DelayedPresenceOptions<T> = {
+  /**
+   * How long to wait in `pending-show` before transitioning to the `shown`
+   * state.
+   */
+  showDelay?: number;
+  /**
+   * How long to wait in `pending-hide` before transitioning back to the `idle`
+   * state.
+   */
+  hideDelay?: number;
+  /**
+   * Delay to use instead of `showDelay` when we're warm; defaults to `0`
+   * (instant).
+   */
+  fastShowDelay?: number;
+  /**
+   * How recently we must have hidden something to count as "warm" and skip the
+   * show delay; defaults to `showDelay`.
+   */
+  intentWindow?: number;
+  /**
+   * Function for detecting whether two keys are equal. Optional; will fall
+   * back to equality check via `===`.
+   */
+  isSameKey?: (a: T, b: T) => boolean;
+
+  /** What to execute as we transition from `pending-shown` to `shown`. */
+  onShow: (key: T) => void;
+
+  /** What to execute as we transition from `pending-hide` to `idle`. */
+  onHide: (key: T) => void;
+};
+
+type DelayedPresenceState = 'idle' | 'pending-show' | 'shown' | 'pending-hide';
+
+/**
+ * A state machine that uses delays between state changes to guard against
+ * rapid state fluctuation.
+ *
+ * Methods accept a key that scopes the state machine; this helps us know when
+ * to reset the state machine and when to ignore stale requests to transition.
+ *
+ * We use this as a way of manually managing show/hide delays on tooltips.
+ */
+class DelayedPresence<T> {
+  private state: DelayedPresenceState = 'idle';
+  private currentKey?: T;
+  private timer?: ReturnType<typeof setTimeout>;
+  private lastHideAt?: number;
+
+  private options: DelayedPresenceOptions<T>;
+
+  constructor(options: DelayedPresenceOptions<T>) {
+    this.options = options;
+  }
+
+  enter (key: T) {
+    if (this.#inState('shown', 'pending-hide') && this.#isSame(key)) {
+      // Same target re-entered before the hide timer fired; cancel it and stay
+      // shown. This filters out spurious mouseout events.
+      this.#cancelTimer();
+      this.state = 'shown';
+      return;
+    }
+
+    if (!this.#inState('idle')) {
+      // Different target, or else same target still pending its first show.
+      // Tear down whatever is in flight and start over.
+      this.#reset();
+    }
+
+    this.currentKey = key;
+    this.state = 'pending-show';
+
+    let delay = this.#effectiveShowDelay();
+
+    if (delay <= 0) {
+      this.state = 'shown';
+      this.options.onShow(key);
+      return;
+    }
+
+    this.timer = setTimeout(() => {
+      this.state = 'shown';
+      this.options.onShow(key);
+    }, this.options.showDelay ?? 0);
+  }
+
+  leave (key: T) {
+    if (!this.#isSame(key)) {
+      // A stale leave for a target we've already left.
+      return;
+    }
+
+    this.#cancelTimer();
+
+    if (this.#inState('pending-show')) {
+      this.state = 'idle';
+      this.currentKey = undefined;
+      return;
+    }
+
+    if (this.#inState('shown')) {
+      this.state = 'pending-hide';
+      this.timer = setTimeout(() => {
+        this.state = 'idle';
+        this.lastHideAt = Date.now();
+        this.options.onHide(key);
+        this.currentKey = undefined;
+      }, this.options.hideDelay ?? 0);
+    }
+  }
+
+  dispose () {
+    this.#reset();
+  }
+
+  // Like `dispose`, but only resets when the key matches.
+  dismiss (key?: T) {
+    if (key !== undefined && !this.#isSame(key)) return;
+    this.#reset();
+  }
+
+  #inState (...states: DelayedPresenceState[]) {
+    if (states.length === 1) {
+      return this.state === states[0];
+    }
+    return states.some(s => this.state === s);
+  }
+
+  #isSame (key: T) {
+    if (this.currentKey === undefined) return false;
+    return this.options.isSameKey?.(key, this.currentKey) ?? key === this.currentKey;
+  }
+
+  #reset () {
+    this.#cancelTimer();
+    if (this.#inState('shown', 'pending-hide') && this.currentKey !== undefined) {
+      this.lastHideAt = Date.now();
+      this.options.onHide(this.currentKey);
+    }
+    this.state = 'idle';
+    this.currentKey = undefined;
+  }
+
+  #effectiveShowDelay () {
+    let showDelay = this.options.showDelay ?? 0;
+    if (this.lastHideAt === undefined) return showDelay;
+
+    let intentWindow = this.options.intentWindow ?? showDelay;
+    let isWarm = (Date.now() - this.lastHideAt) < intentWindow;
+    return isWarm ? (this.options.fastShowDelay ?? 0) : showDelay;
+  }
+
+  #cancelTimer () {
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = undefined;
+  }
+}
+
+type TooltipMetadata = {
+  range: IBufferRange,
+  rangeType?: 'buffer' | 'viewport'
+  uri: string,
+};
+
 /**
  * A link handler class designed to fulfill both the interfaces related to link
  * handling (even though they differ from one another very slightly).
@@ -129,12 +296,15 @@ export class TerminalElement extends HTMLElement {
   private initializedPromise?: Promise<void>;
   private createdPromise?: Promise<void>;
   private findPalette?: FindPalette;
+
+  // The bundle of subscriptions that manages all the transient items of a
+  // tooltip: the marker, the decoration, and the tooltip itself.
   private tooltip?: CompositeDisposable;
+  // The range for which we are currently showing a tooltip.
   private tooltipRange?: IBufferRange;
-  private tooltipHideTimer?: NodeJS.Timeout;
 
   private linkHandler: TerminalLinkHandler;
-  private cursorPosition?: IBuffer;
+  private linkTooltip: DelayedPresence<TooltipMetadata>;
 
   // Object that holds the various elements.
   private div?: Record<'top' | 'main' | 'menu' | 'terminal' | 'palette', HTMLDivElement>;
@@ -163,11 +333,24 @@ export class TerminalElement extends HTMLElement {
 
   constructor () {
     super();
+
     this.linkHandler = new TerminalLinkHandler({
       activate: (event, text, range) => this.activateLink(event, text, range),
-      hover: (event, text, range) => this.hoverLink(event, text, range),
+      hover: (event, text, range) => this.hoverLink(event, text, range, 'buffer'),
       leave: (event, text, range) => this.leaveLink(event, text, range)
     });
+
+    this.linkTooltip = new DelayedPresence<TooltipMetadata>({
+      showDelay: atom.inSpecMode() ? 10 : 1000,
+      hideDelay: atom.inSpecMode() ? 10 : 100,
+      isSameKey: (a, b) => this.rangesAreEqual(a.range, b.range),
+      onShow: ({ range, uri, rangeType }) => {
+        return this.showHoverTooltip(range, uri, rangeType);
+      },
+      onHide: ({ range, uri }) => {
+        return this.hideHoverTooltip(range, uri);
+      }
+    })
   }
 
   async initialize (model: TerminalModel) {
@@ -352,8 +535,126 @@ export class TerminalElement extends HTMLElement {
     }
   }
 
-  hoverLink (_event: MouseEvent, uri: string, range?: IBufferRange | IViewportRange, _rangeType?: 'buffer' | 'viewport') {
+  // Immediately create and display a tooltip over the given range that
+  // contains the given URI.
+  showHoverTooltip (range: IBufferRange | IViewportRange, uri: string, rangeType: 'buffer' | 'viewport' = 'buffer') {
     if (!this.terminal) return;
+
+    // To create the decoration that serves as our tooltip anchor element,
+    // we must first create a marker on the correct row. This marker is
+    // placed relative to where the cursor is right now.
+    //
+    // This information is not a lot of fun to retrieve! And we must
+    // account for scenarios where the cursor is off screen because we've
+    // scrolled up in the viewport.
+    let {
+      // This seems to correlate to the row offset that the cursor has
+      // _if_ the viewport is scrolled all the way to the bottom.
+      cursorY,
+      // This seems to correlate to how many lines are offscreen _if_ the
+      // viewport is scrolled all the way to the bottom.
+      baseY,
+      viewportY
+    } = this.terminal.buffer.active;
+
+    // The meaning of `range.start.(y|x)` differs based on where the range
+    // came from:
+    //
+    // * `IBufferRange` (OSC 8 links): 1-based index; absolute buffer
+    //   position.
+    // * `IViewportRange` (plain URLs via `WebLinksAddon`): 0-based index;
+    //   relative to the current viewport's top row.
+    //
+    // `registerMarker`'s offset is always relative to the cursor's
+    // absolute buffer position, so we have to convert into that target
+    // space.
+    let markerY: number;
+    let x: number;
+    if (rangeType === 'viewport') {
+      markerY = range.start.y + viewportY - baseY - cursorY;
+      x = range.start.x;
+    } else {
+      markerY = range.start.y - (cursorY + baseY) - 1;
+      x = range.start.x - 1;
+    }
+
+    Logger.debug(`Placed marker on row:`, markerY, 'given range starting at', range.start.y, 'and cursorY', cursorY, 'and baseY', baseY);
+
+    let marker = this.terminal.registerMarker(markerY);
+    let decoration = this.terminal.registerDecoration({
+      x,
+      marker,
+      width: range.end.y === range.start.y ? (range.end.x - range.start.x + 1) : 1
+    });
+
+    // XTerm's documentation _claims_ to skip the registration of
+    // decorations when we're on the alt buffer (used by, e.g., `less` and
+    // `vim` and `top` and anything else complex enough to need the concept
+    // of a viewport and its own management of a scroll buffer).
+    //
+    // Yet it _does not_ actually skip in this scenario! This is good for
+    // us; it would be a lot harder to deliver hover tooltips without this
+    // mechanism. The only caveat is that it does unconditionally set
+    // `display: none` on all alt-buffer decorations rather than attempt to
+    // discern whether they're present in the viewport. (It would not
+    // matter in our case; this whole code path is triggered when a user
+    // mouses over a link, so we can assume that the link is present in the
+    // viewport!)
+    //
+    // A reading of the source code and the design of the decoration system
+    // suggests that this is a documentation bug rather than a code bug.
+    // Nothing about this has changed in the XTerm 6.1.0 beta, and we
+    // expect that it won't change in the future… but we do still guard
+    // against a lack of decoration just in case!
+    if (!decoration) return;
+
+    this.tooltip = new CompositeDisposable();
+    this.tooltip.add(new Disposable(() => {
+      decoration?.dispose();
+      marker?.dispose();
+    }));
+
+    let originalTooltip = this.tooltip;
+    decoration.onRender((elem) => {
+      if (!this.terminal) return;
+
+      // Guard against an old decoration trying to render.
+      if (this.tooltip !== originalTooltip) return;
+
+      // Explicitly remove any `none` value for `display` for the reasons
+      // described above. If XTerm thinks this decoration should be hidden,
+      // it's almost certainly wrong.
+      elem.style.display = '';
+
+      // All tooltip management is manual. We don't want to rely on a belief that
+      // `element` is being hovered by the mouse pointer (that's not safe to
+      // assume when a decoration spans multiple lines), so it's better to opt
+      // into `trigger: 'manual'` and have the tooltip appear instantly. The
+      // tooltip will be hidden later on by disposing the return value of
+      // `atom.tooltips.add` — which we do automatically.
+      //
+      // This is not a big problem! The only downside of manual triggering is
+      // that we lose built-in management of show/hide delay — but that's where
+      // `DelayedPresence` steps in.
+      this.tooltip?.add(atom.tooltips.add(elem, {
+        title: uri,
+        trigger: 'manual'
+      }));
+    });
+  }
+
+  // Immediately hide the active tooltip.
+  hideHoverTooltip (_range: TooltipMetadata['range'], _uri: string) {
+    this.tooltip?.dispose();
+    this.tooltipRange = undefined;
+  }
+
+  // Called when the user hovers over a link; schedules the showing of a
+  // tooltip.
+  hoverLink (_event: MouseEvent, uri: string, range?: IBufferRange | IViewportRange, rangeType: 'buffer' | 'viewport' = 'buffer') {
+    if (!this.terminal || !range) return;
+
+    this.tooltipRange = range;
 
     // Upon first hover, we're prone to trigger a `leave` and an almost
     // immediate `hover`. This might be the result of temporary confusion after
@@ -362,76 +663,10 @@ export class TerminalElement extends HTMLElement {
     //
     // But whatever the cause, it means we're doing a sort of debouncing here.
     // If we're in the second of two rapid calls to `hover`, then there will be
-    // an existing tooltip we want to preserve. We do a range comparison to
-    // distinguish this case from the case where you move directly from one
-    // hyperlinked range to another.
-    if (range) {
-      if (this.rangesAreEqual(range, this.tooltipRange) && this.tooltip && this.tooltipHideTimer) {
-        // We already showed a tooltip at this position just a moment ago and
-        // have not yet removed it. Keep it active!
-        Logger.log('Keeping existing tooltip!', this.inspectRange(range));
-        clearTimeout(this.tooltipHideTimer);
-        this.tooltipHideTimer = undefined;
-      } else {
-        let reason = '';
-        if (!this.tooltip) {
-          reason = 'because tooltip does not exist';
-        } else if (!this.tooltipHideTimer) {
-          reason = 'because we are not scheduled to hide one';
-        } else {
-          reason = 'because range changed';
-        }
-        Logger.warn('Making new tooltip for range', this.inspectRange(range), reason, `(Last range: ${this.inspectRange(this.tooltipRange)})`);
-        this.removeCurrentTooltip(true);
-
-        // To create the decoration that serves as our tooltip anchor element,
-        // we must first create a marker on the correct row. This marker is
-        // placed relative to where the cursor is right now.
-        //
-        // This information is not a lot of fun to retrieve! And we must
-        // account for scenarios where the cursor is off screen because we've
-        // scrolled up in the viewport.
-        let {
-          // This seems to correlate to the row offset that the cursor has
-          // _if_ the viewport is scrolled all the way to the bottom.
-          cursorY,
-          // This seems to correlate to how many lines are offscreen _if_ the
-          // viewport is scrolled all the way to the bottom.
-          baseY
-        } = this.cursorPosition ?? { cursorY: 0, baseY: 0 };
-
-        // Add those values together and you get the absolute position of the
-        // row the cursor occupies in the buffer. Now we can place our marker
-        // relative to the cursor.
-        //
-        // Oddly, even though hovering over a URL theoretically produces an
-        // `IViewportRange` rather than an `IBufferRange`, it does not seem to
-        // affect the math here.
-        let markerY = range.start.y - (cursorY + baseY) - 1;
-        Logger.debug(`Placed marker on row:`, markerY, 'given range starting at', range.start.y, 'and cursorY', cursorY, 'and baseY', baseY);
-        let marker = this.terminal.registerMarker(markerY);
-        let decoration = this.terminal.registerDecoration({
-          x: range.start.x - 1,
-          marker,
-          width: range.end.y === range.start.y ? (range.end.x - range.start.x + 1) : 1
-        });
-        this.tooltip = new CompositeDisposable();
-        this.tooltip.add(new Disposable(() => {
-          decoration?.dispose();
-          marker?.dispose();
-        }));
-        let originalTooltip = this.tooltip;
-        decoration?.onRender((elem) => {
-          // Guard against an old decoration trying to render.
-          if (this.tooltip !== originalTooltip) {
-            return;
-          }
-          this.tooltip?.add(this.addTooltip(elem, uri));
-        });
-      }
-
-      this.tooltipRange = range;
-    }
+    // an existing tooltip we want to preserve. This is why we have the
+    // infrastructure of `DelayedPresence` — to detect this case and keep a
+    // reliable state in our state machine.
+    this.linkTooltip.enter({ range, uri, rangeType });
 
     // TODO: Ideally, we would prevent the link from being underlined on hover
     // _if_ configuration is such that a modifier key must be held down to open
@@ -440,56 +675,21 @@ export class TerminalElement extends HTMLElement {
     //
     // Even worse: that'd only work for URLs in the terminal, and not for OSC 8
     // hyperlinks (for which there is no easy way to accomplish this either).
-
   }
 
-  leaveLink (event: MouseEvent, uri: string, range?: IBufferRange) {
-    Logger.debug('#leave', uri, event, range);
-    this.removeCurrentTooltip();
-  }
+  // Called when the user mouses away from a link; schedules the hiding of the
+  // tooltip.
+  leaveLink (_event: MouseEvent, uri: string, range?: IBufferRange) {
+    // Ideally, we get called with a range; that lets us know whether this is
+    // a fresh or stale request to hide the tooltip. But we'll fall back to the
+    // current active tooltip range, if one exists.
+    let operativeRange = range ?? this.tooltipRange;
+    if (!operativeRange) return;
 
-  addTooltip (element: HTMLElement, tooltipText: string) {
-    let range = this.tooltipRange;
-    if (!range) return new Disposable(() => {});
-    // If the range starts and ends on the same row, we can use `trigger:
-    // 'hover'` and rely on `TooltipManager` to manage our tooltip delay.
-    //
-    // But if the range spans multiple rows, we cannot guarantee that the
-    // element we create will be under the pointer, since we don't know which
-    // part of the range the user is mousing over. So we'll do `trigger:
-    // 'manual'` in order to guarantee that the tooltip appears even when we
-    // aren't hovering over the anchor element.
-    //
-    // This means we don't get the delay behavior, but it's better than
-    // nothing.
-    //
-    // TODO: Either (a) determine which buffer line the mouse pointer is over
-    // so that we can guarantee the creation of a decoration on that line; or
-    // (b) use `trigger: 'manual'` 100% of the time and manually manage the
-    // show delay the way we manage the hide delay later.
-    let trigger = range.start.y === range.end.y ? 'hover' as const : 'manual' as const;
-    return atom.tooltips.add(element, {
-      title: tooltipText,
-      trigger,
-      delay: { show: 1000, hide: 100 }
-    });
-  }
-
-  // Schedule the removal of the current tooltip — or remove it immediately.
-  removeCurrentTooltip (immediate = false) {
-    if (this.tooltipHideTimer) {
-      clearTimeout(this.tooltipHideTimer);
-    }
-    if (immediate) {
-      this.tooltip?.dispose();
-      this.tooltipHideTimer = undefined;
-      return;
-    }
-    this.tooltipHideTimer = setTimeout(() => {
-      this.tooltip?.dispose();
-      clearTimeout(this.tooltipHideTimer);
-      this.tooltipHideTimer = undefined;
-    }, 100);
+    // Trigger a delay-gated hiding of the tooltip. This will schedule the
+    // hiding but cancel it if a mouseover happens again during the `hideDelay`
+    // interval.
+    this.linkTooltip.leave({ range: operativeRange, uri });
   }
 
   // Open the given URI within Pulsar.
@@ -804,7 +1004,7 @@ export class TerminalElement extends HTMLElement {
     // wait for the shell before proceeding.
     await this.waitForShellEnvironment();
 
-    let options = {
+    let options: ITerminalOptions = {
       ...this.getXtermOptions(),
       allowProposedApi: true,
       linkHandler: this.linkHandler,
@@ -928,11 +1128,6 @@ export class TerminalElement extends HTMLElement {
         if (this.isPtyProcessRunning()) {
           this.pty!.write(data);
         }
-      }),
-
-      this.terminal.onCursorMove(() => {
-        if (!this.terminal) return;
-        this.cursorPosition = this.terminal.buffer.active;
       }),
 
       // When the user selects text, we might want to automatically copy it to
