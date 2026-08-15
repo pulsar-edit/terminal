@@ -1,7 +1,11 @@
-import { Disposable } from 'atom';
 import { Signal, TerminalModel } from './model';
 import { IBufferCellPosition, IBufferRange, ITerminalOptions, ITheme, IViewportRange, Terminal as XTerminal } from '@xterm/xterm';
 import { Pty } from './pty';
+type TooltipMetadata = {
+    range: IBufferRange;
+    rangeType?: 'buffer' | 'viewport';
+    uri: string;
+};
 export declare class TerminalElement extends HTMLElement {
     #private;
     model?: TerminalModel;
@@ -15,19 +19,18 @@ export declare class TerminalElement extends HTMLElement {
     private findPalette?;
     private tooltip?;
     private tooltipRange?;
-    private tooltipHideTimer?;
     private linkHandler;
-    private cursorPosition?;
+    private linkTooltip;
     private div?;
     static create(): TerminalElement;
     constructor();
     initialize(model: TerminalModel): Promise<void>;
     ready(): Promise<void | undefined>;
     activateLink(event: MouseEvent, uri: string, _range?: IBufferRange): void;
-    hoverLink(_event: MouseEvent, uri: string, range?: IBufferRange | IViewportRange, _rangeType?: 'buffer' | 'viewport'): void;
-    leaveLink(event: MouseEvent, uri: string, range?: IBufferRange): void;
-    addTooltip(element: HTMLElement, tooltipText: string): Disposable;
-    removeCurrentTooltip(immediate?: boolean): void;
+    showHoverTooltip(range: IBufferRange | IViewportRange, uri: string, rangeType?: 'buffer' | 'viewport'): void;
+    hideHoverTooltip(_range: TooltipMetadata['range'], _uri: string): void;
+    hoverLink(_event: MouseEvent, uri: string, range?: IBufferRange | IViewportRange, rangeType?: 'buffer' | 'viewport'): void;
+    leaveLink(_event: MouseEvent, uri: string, range?: IBufferRange): void;
     openInPulsar(uri: string, isDirectory?: boolean): Promise<void>;
     getModel(): TerminalModel | undefined;
     destroy(): void;
@@ -70,3 +73,4 @@ export declare class TerminalElement extends HTMLElement {
     inspectPoint(cell: IBufferCellPosition): string;
     inspectRange(range: IBufferRange | undefined): string;
 }
+export {};
