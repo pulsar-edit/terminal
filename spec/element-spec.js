@@ -308,4 +308,128 @@ describe('TerminalElement', () => {
       }
     });
   });
+
+  describe('activateLink()', () => {
+    it('does nothing without the modifier key when one is required', () => {
+      atom.config.set('terminal.behavior.requireModifierToOpenUrls', true);
+      let event = new MouseEvent('click', { metaKey: false, ctrlKey: false });
+      element.activateLink(event, 'https://example.com');
+      expect(shell.openExternal).not.toHaveBeenCalled();
+    });
+
+    it('opens a non-file URI externally when the modifier is held', () => {
+      atom.config.set('terminal.behavior.requireModifierToOpenUrls', true);
+      let event = new MouseEvent('click', { metaKey: true, ctrlKey: true });
+      element.activateLink(event, 'https://example.com');
+      expect(shell.openExternal).toHaveBeenCalledWith('https://example.com');
+    });
+
+    it('does nothing for a file:// URI that does not exist on disk', () => {
+      atom.config.set('terminal.behavior.requireModifierToOpenUrls', false);
+      spyOn(shell, 'showItemInFolder');
+      let event = new MouseEvent('click');
+      element.activateLink(event, 'file:///nonexistent/path/does-not-exist');
+      expect(shell.openExternal).not.toHaveBeenCalled();
+      expect(shell.showItemInFolder).not.toHaveBeenCalled();
+    });
+
+    it('opens a directory externally (when `dir-explorer-file-pulsar` is configured)', () => {
+      atom.config.set('terminal.behavior.requireModifierToOpenUrls', false);
+      atom.config.set('terminal.behavior.hyperlinkPathBehavior', 'dir-explorer-file-pulsar');
+      let uri = require('url').pathToFileURL(tmpdir).toString();
+      let event = new MouseEvent('click');
+      element.activateLink(event, uri);
+      expect(shell.openExternal).toHaveBeenCalledWith(uri);
+    });
+
+    it('reveals an existing file in the file explorer (when configured)', async () => {
+      let filePath = path.join(tmpdir, 'example.txt');
+      require('fs-extra').writeFileSync(filePath, 'hi');
+      spyOn(shell, 'showItemInFolder');
+      atom.config.set('terminal.behavior.requireModifierToOpenUrls', false);
+      atom.config.set('terminal.behavior.hyperlinkPathBehavior', 'all-explorer');
+      let uri = require('url').pathToFileURL(filePath).toString();
+      element.activateLink(new MouseEvent('click'), uri);
+      expect(shell.showItemInFolder).toHaveBeenCalled();
+    });
+    it('opens an existing file in Pulsar (when configured)', async () => {
+      let filePath = path.join(tmpdir, 'example.txt');
+      require('fs-extra').writeFileSync(filePath, 'hi');
+      spyOn(atom.workspace, 'open');
+      atom.config.set('terminal.behavior.requireModifierToOpenUrls', false);
+      atom.config.set('terminal.behavior.hyperlinkPathBehavior', 'dir-explorer-file-pulsar');
+      let uri = require('url').pathToFileURL(filePath).toString();
+      element.activateLink(new MouseEvent('click'), uri);
+      expect(atom.workspace.open).toHaveBeenCalled();
+    });
+  });
+
+  fdescribe('hoverLink() / leaveLink()', () => {
+    // This behavior is hard to test! We do it by constructing artificial
+    // ranges that XTerm.js understands. (Its "range" data structure is similar
+    // to ours, but not identical.)
+    //
+    // If these tests prove to be too fragile and too dependent on
+    // implementation details, we can convert them to a less finicky approach
+    // that just asserts `atom.tooltips.add` was called.
+    function makeTerminalRange (startX, startY, endX, endY) {
+      return { start: { x: startX, y: startY }, end: { x: endX, y: endY } };
+    }
+
+    it('creates a tooltip on hover', () => {
+      spyOn(atom.tooltips, 'add').andCallThrough();
+      let range = makeTerminalRange(1, 1, 5, 1);
+      element.hoverLink(new MouseEvent('mouseover'), 'file:///foo', range);
+      expect(element.tooltipRange).toEqual(range);
+    });
+
+    it('reuses the existing tooltip when hovering the same range twice in a row', () => {
+      let range = makeTerminalRange(1, 1, 5, 1);
+      element.hoverLink(new MouseEvent('mouseover'), 'file:///foo', range);
+      let firstTooltip = element.tooltip;
+      element.leaveLink(new MouseEvent('mouseout'), 'file:///foo', range);
+      element.hoverLink(new MouseEvent('mouseover'), 'file:///foo', range);
+      expect(element.tooltip).toBe(firstTooltip);
+    });
+
+    it('creates a new tooltip when the range changes', () => {
+      let rangeA = makeTerminalRange(1, 1, 5, 1);
+      let rangeB = makeTerminalRange(1, 2, 5, 2);
+      element.hoverLink(new MouseEvent('mouseover'), 'file:///foo', rangeA);
+      let firstTooltip = element.tooltip;
+      element.hoverLink(new MouseEvent('mouseover'), 'file:///bar', rangeB);
+      expect(element.tooltip).not.toBe(firstTooltip);
+    });
+
+    it('disposes the tooltip after leaving, once the hide delay elapses', async () => {
+      jasmine.useRealClock();
+      let range = makeTerminalRange(1, 1, 5, 1);
+      element.hoverLink(new MouseEvent('mouseover'), 'file:///foo', range);
+      let tooltip = element.tooltip;
+      spyOn(tooltip, 'dispose').andCallThrough();
+      element.leaveLink(new MouseEvent('mouseout'), 'file:///foo', range);
+      await wait(150); // longer than the 100ms hide delay
+      expect(tooltip.dispose).toHaveBeenCalled();
+    });
+  });
+
+  describe('rangesAreEqual()', () => {
+    it('is true for two undefined ranges', () => {
+      expect(element.rangesAreEqual(undefined, undefined)).toBe(true);
+    });
+    it('is false when only one side is undefined', () => {
+      let range = { start: { x: 1, y: 1 }, end: { x: 2, y: 1 } };
+      expect(element.rangesAreEqual(range, undefined)).toBe(false);
+    });
+    it('is true for ranges with identical start/end points', () => {
+      let a = { start: { x: 1, y: 1 }, end: { x: 2, y: 1 } };
+      let b = { start: { x: 1, y: 1 }, end: { x: 2, y: 1 } };
+      expect(element.rangesAreEqual(a, b)).toBe(true);
+    });
+    it('is false when points differ', () => {
+      let a = { start: { x: 1, y: 1 }, end: { x: 2, y: 1 } };
+      let b = { start: { x: 1, y: 1 }, end: { x: 3, y: 1 } };
+      expect(element.rangesAreEqual(a, b)).toBe(false);
+    });
+  });
 });

@@ -317,7 +317,9 @@ export class TerminalElement extends HTMLElement {
       // This is a URL, most likely. Hand it off to the system for opening in
       // the user's default browser.
       shell.openExternal(uri);
+      return;
     }
+
 
     // If we get this far, we're dealing with a file path. The way we respond
     // to various paths depends upon the user's configuration.
