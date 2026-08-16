@@ -156,4 +156,57 @@ describe('Terminal', () => {
       expect(url.searchParams.get('cwd')).toBe(testPath);
     });
   });
+
+  describe('openInCenterOrDock()', () => {
+    beforeEach(() => {
+      spyOn(atom.workspace, 'open');
+      spyOn(Terminal, 'open').andCallThrough();
+    });
+
+    it('opens in the bottom dock', async () => {
+      await Terminal.openInCenterOrDock(atom.workspace.getBottomDock());
+      let options = atom.workspace.open.calls[0].args[1];
+      expect(options.location).toBe('bottom');
+    });
+
+    it('opens in the left dock', async () => {
+      await Terminal.openInCenterOrDock(atom.workspace.getLeftDock());
+      let options = atom.workspace.open.calls[0].args[1];
+      expect(options.location).toBe('left');
+    });
+
+    it('opens in the right dock', async () => {
+      await Terminal.openInCenterOrDock(atom.workspace.getRightDock());
+      let options = atom.workspace.open.calls[0].args[1];
+      expect(options.location).toBe('right');
+    });
+
+    it('opens in the center', async () => {
+      await Terminal.openInCenterOrDock(atom.workspace.getCenter());
+      let options = atom.workspace.open.calls[0].args[1];
+      expect(options.location).toBe('center');
+    });
+
+    it('leaves the location unset for an unrecognized target', async () => {
+      await Terminal.openInCenterOrDock({ getActivePane () {} });
+      // `location` is `undefined` when we call `Terminal.open`…
+      let options = Terminal.open.calls[0].args[1];
+      expect(options.location).toBeUndefined();
+      // …but gets filled in with a value by the time we make it to
+      // `atom.workspace.open`.
+      let workspaceOpenOptions = atom.workspace.open.calls[0].args[1];
+      expect(workspaceOpenOptions.location).not.toBeUndefined();
+    });
+
+    it('relies on `getActiveWorkspaceLocation()` to provide a fallback location', async () => {
+      // To prove where we get the fallback location from, we stub
+      // `getActiveWorkspaceLocation` to return `undefined` and test that it
+      // gets all the way to `atom.workspace.open` without a `location` value.
+      spyOn(Terminal, 'getActiveWorkspaceLocation').andReturn(undefined);
+      await Terminal.openInCenterOrDock({ getActivePane () {} });
+      let workspaceOpenOptions = atom.workspace.open.calls[0].args[1];
+      expect(workspaceOpenOptions.location).toBeUndefined();
+    })
+  });
+
 });
