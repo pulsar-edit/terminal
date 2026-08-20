@@ -7,6 +7,7 @@ const { TerminalElement } = require('../lib/element');
 const { TerminalModel } = require('../lib/model');
 const { Terminal } = require('@xterm/xterm');
 const { Pty } = require('../lib/pty');
+const { ShellIntegrationAddon } = require('../lib/shell-integration/addon');
 
 const {
   activatePackage,
@@ -454,6 +455,107 @@ describe('TerminalElement', () => {
       let a = { start: { x: 1, y: 1 }, end: { x: 2, y: 1 } };
       let b = { start: { x: 1, y: 1 }, end: { x: 3, y: 1 } };
       expect(element.rangesAreEqual(a, b)).toBe(false);
+    });
+  });
+
+  describe('shell integration', () => {
+    const shellIntegrationModule = require('../lib/shell-integration');
+    const FAKE_NONCE = 'test-nonce';
+
+    async function write (terminal, data) {
+      return new Promise((resolve) => terminal.write(data, resolve));
+    }
+
+    // The addon is loaded via `terminal.loadAddon(...)`, same as the
+    // WebLinks/WebGL addons above, so this is the only way to get at the
+    // real instance without reaching into `TerminalElement`'s private
+    // `#shellIntegrationAddon` field (which, being a true private field,
+    // isn't reachable from spec code at all).
+    function findShellIntegrationAddon () {
+      let matchingCall = Terminal.prototype.loadAddon.calls.find(
+        (call) => call.args[0] instanceof ShellIntegrationAddon
+      );
+      return matchingCall?.args[0];
+    }
+
+    beforeEach(() => {
+      spyOn(Terminal.prototype, 'loadAddon').andCallThrough();
+      // The shell on this machine (or CI's) might be bash, zsh, fish, or
+      // pwsh, and `getShellIntegrationInjection` does real, sometimes slow
+      // filesystem work (see `shell-integration-spec.js`, which already
+      // covers that logic directly, per-shell). None of that is relevant
+      // here — these specs are only about how `TerminalElement` wires the
+      // result into the addon — so it's stubbed to something fast and
+      // deterministic instead.
+      spyOn(shellIntegrationModule, 'getShellIntegrationInjection').andReturn(Promise.resolve({
+        enabled: true,
+        injection: {
+          args: [],
+          env: { PULSAR_TERMINAL_INJECTION: '1', PULSAR_TERMINAL_NONCE: FAKE_NONCE }
+        }
+      }));
+    });
+
+    afterEach(() => {
+      Terminal.prototype.loadAddon.reset();
+    });
+
+    it('loads the addon when shell integration is enabled', async () => {
+      atom.config.set('terminal.terminal.enableShellIntegration', true);
+      await createElement();
+      expect(findShellIntegrationAddon()).toBeTruthy();
+    });
+
+    it('does not load the addon when shell integration is disabled', async () => {
+      atom.config.set('terminal.terminal.enableShellIntegration', false);
+      await createElement();
+      expect(findShellIntegrationAddon()).toBeUndefined();
+    });
+
+    it("updates the model's cwd when the terminal receives an OSC 633 Cwd sequence", async () => {
+      atom.config.set('terminal.terminal.enableShellIntegration', true);
+      let localElement = await createElement();
+      await write(localElement.terminal, `\x1b]633;P;Cwd=${tmpdir}\x07`);
+      expect(localElement.model.cwd).toBe(tmpdir);
+    });
+
+    it("leaves the model's cwd alone when shell integration is disabled", async () => {
+      atom.config.set('terminal.terminal.enableShellIntegration', false);
+      let localElement = await createElement();
+      let cwdBefore = localElement.model.cwd;
+      // With the addon never loaded, xterm has no OSC 633 handler at all, so
+      // this sequence goes wholly unhandled rather than being caught and
+      // ignored by us.
+      await write(localElement.terminal, `\x1b]633;P;Cwd=${tmpdir}\x07`);
+      expect(localElement.model.cwd).toBe(cwdBefore);
+    });
+
+    it('gives the addon the nonce from the injection result, gating command-line attribution', async () => {
+      atom.config.set('terminal.terminal.enableShellIntegration', true);
+      let localElement = await createElement();
+
+      let addonInstance = findShellIntegrationAddon();
+      let spy = jasmine.createSpy('execute-spy');
+      addonInstance.onDidExecuteCommand(spy);
+
+      await write(localElement.terminal, `\x1b]633;E;npm test;${FAKE_NONCE}\x07`);
+      await write(localElement.terminal, '\x1b]633;C\x07');
+
+      expect(spy.calls[0].args[0].commandLine).toBe('npm test');
+    });
+
+    it('does not attribute a command line reported under a stale nonce', async () => {
+      atom.config.set('terminal.terminal.enableShellIntegration', true);
+      let localElement = await createElement();
+
+      let addonInstance = findShellIntegrationAddon();
+      let spy = jasmine.createSpy('execute-spy');
+      addonInstance.onDidExecuteCommand(spy);
+
+      await write(localElement.terminal, '\x1b]633;E;npm test;not-the-real-nonce\x07');
+      await write(localElement.terminal, '\x1b]633;C\x07');
+
+      expect(spy.calls[0].args[0].commandLine).toBeUndefined();
     });
   });
 });

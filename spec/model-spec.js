@@ -215,6 +215,29 @@ describe('TerminalModel', () => {
     });
   });
 
+  describe('setCwd()', () => {
+    it('updates the cwd property', () => {
+      model.setCwd('/some/dir');
+      expect(model.cwd).toBe('/some/dir');
+    });
+
+    // This is what lets a duplicated pane item (e.g. from a split) reopen at
+    // wherever the shell actually was, not just wherever the terminal
+    // started — see `getURI()`/`serialize()`, which read from `url`.
+    it('persists the new cwd into the URI, so it survives serialization', () => {
+      model.setCwd('/some/dir');
+      let url = new URL(model.getURI());
+      expect(url.searchParams.get('cwd')).toBe('/some/dir');
+    });
+
+    it('overwrites a previously set cwd in the URI', () => {
+      model.setCwd('/first/dir');
+      model.setCwd('/second/dir');
+      let url = new URL(model.getURI());
+      expect(url.searchParams.get('cwd')).toBe('/second/dir');
+    });
+  });
+
   describe('isModified()', () => {
     it('is initially false', () => {
       expect(model.isModified()).toBe(false);

@@ -230,11 +230,22 @@ async function injectZsh (
     return { enabled: false, reason: 'Failed to create ZDOTDIR' };
   }
 
+  // `zdotdir` is a single, stable, shared path (keyed only by username) —
+  // not per-session — so that it survives package updates without leaving
+  // temp-dir litter behind on every restart. But that means concurrent
+  // restarts (e.g. two terminals opened close together) copy into the same
+  // destination files at once; `fs.copy`'s default `overwrite: true` will
+  // unlink-then-write, and two overlapping unlinks of the same path throw
+  // ENOENT. Since the content here is always identical to what's already on
+  // disk from any previous copy (it only changes when the package itself is
+  // updated), skipping the copy when the destination already exists avoids
+  // the race entirely rather than papering over it with a lock.
+  let copyOptions = { overwrite: false };
   await Promise.all([
-    fs.copy(path.join(SCRIPT_ROOT, 'shell-integration-rc.zsh'), path.join(zdotdir, '.zshrc')),
-    fs.copy(path.join(SCRIPT_ROOT, 'shell-integration-profile.zsh'), path.join(zdotdir, '.zprofile')),
-    fs.copy(path.join(SCRIPT_ROOT, 'shell-integration-env.zsh'), path.join(zdotdir, '.zshenv')),
-    fs.copy(path.join(SCRIPT_ROOT, 'shell-integration-login.zsh'), path.join(zdotdir, '.zlogin'))
+    fs.copy(path.join(SCRIPT_ROOT, 'shell-integration-rc.zsh'), path.join(zdotdir, '.zshrc'), copyOptions),
+    fs.copy(path.join(SCRIPT_ROOT, 'shell-integration-profile.zsh'), path.join(zdotdir, '.zprofile'), copyOptions),
+    fs.copy(path.join(SCRIPT_ROOT, 'shell-integration-env.zsh'), path.join(zdotdir, '.zshenv'), copyOptions),
+    fs.copy(path.join(SCRIPT_ROOT, 'shell-integration-login.zsh'), path.join(zdotdir, '.zlogin'), copyOptions)
   ]);
 
   envMixin.ZDOTDIR = zdotdir;
