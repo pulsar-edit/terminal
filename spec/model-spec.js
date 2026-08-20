@@ -210,7 +210,7 @@ describe('TerminalModel', () => {
   describe('getPath()', () => {
     it('represents cwd correctly', () => {
       let expected = '/some/dir';
-      model.cwd = expected;
+      model.setCwd(expected);
       expect(model.getPath()).toBe(expected);
     });
   });

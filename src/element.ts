@@ -35,6 +35,8 @@ import { getTheme } from './themes';
 // ambiently available. Better to use that without declaring it so as to avoid
 // version clashes.
 import { shell } from '@electron/remote';
+import { getShellIntegrationInjection } from './shell-integration';
+import { ShellIntegrationAddon } from './shell-integration/addon';
 
 // Given a line height and a font size, attempts to adjust the line height so
 // that it results in a pixel height that snaps to the nearest pixel (or
@@ -315,6 +317,7 @@ export class TerminalElement extends HTMLElement {
   #terminalInitiallyVisible: boolean = false;
   #fitAddon?: FitAddon;
   #searchAddon?: SearchAddon;
+  #shellIntegrationAddon?: ShellIntegrationAddon;
   #prioritizedPrefixes: string[] = [];
 
   // Metadata about the PTY.
@@ -868,7 +871,7 @@ export class TerminalElement extends HTMLElement {
 
     // If we get this far, the `cwd` on the model is invalid!
     if (this.model) {
-      this.model.cwd = undefined;
+      this.model.setCwd(undefined);
     }
 
     return undefined;
@@ -895,6 +898,13 @@ export class TerminalElement extends HTMLElement {
     for (let key of deleteEnv) {
       delete env[key];
     }
+
+    // Metadata that helps distinguish this terminal for purposes of shell
+    // integration. This allows users to add custom initialization logic inside
+    // their own init scripts that targets our terminal specifically.
+    env['TERM_PROGRAM'] = 'pulsar';
+    env['TERM_PROGRAM_VERSION'] = atom.getVersion();
+
     return env;
   }
 
@@ -1080,6 +1090,23 @@ export class TerminalElement extends HTMLElement {
     }
     this.#searchAddon = new SearchAddon();
     this.terminal.loadAddon(this.#searchAddon);
+
+    if (Config.get('terminal.enableShellIntegration')) {
+      this.#shellIntegrationAddon = new ShellIntegrationAddon();
+      this.terminal.loadAddon(this.#shellIntegrationAddon);
+      this.subscriptions.add(
+        this.#shellIntegrationAddon.onDidChangeCwd((cwd) => {
+          Logger.debug('Shell integration: cwd changed:', cwd);
+          if (this.model) this.model.setCwd(cwd);
+        }),
+        this.#shellIntegrationAddon.onDidExecuteCommand((command) => {
+          Logger.debug('Shell integration: command executing:', command);
+        }),
+        this.#shellIntegrationAddon.onDidFinishCommand((command) => {
+          Logger.debug('Shell integration: command finished:', command);
+        })
+      );
+    }
 
     // Attach a key event handler so that we get dibs on handling a given key
     // event before the terminal itself.
@@ -1283,12 +1310,27 @@ export class TerminalElement extends HTMLElement {
 
     this.terminal?.reset();
 
+    let command = this.getShellCommand();
+    let args = this.getArgs();
+    let env = this.getEnv();
+
+    let result = await getShellIntegrationInjection(command, args, env);
+    if (result.enabled) {
+      Logger.debug('Shell integration injected:', result.injection);
+      let injection = result.injection;
+      env = { ...env, ...injection.env };
+      args = injection.args;
+      this.#shellIntegrationAddon?.setNonce(injection.env.PULSAR_TERMINAL_NONCE);
+    } else {
+      Logger.debug('Shell integration not injected:', result.reason);
+      this.#shellIntegrationAddon?.setNonce(undefined);
+    }
+
     this.#ptyMeta.options ??= {};
-    this.#ptyMeta.command = this.getShellCommand();
-    this.#ptyMeta.args = this.getArgs();
+    this.#ptyMeta.command = command;
+    this.#ptyMeta.args = args;
 
     let name = this.getTerminalType();
-    let env = this.getEnv();
     let encoding = this.getEncoding();
 
     this.#ptyMeta.options = { name, cwd, env };

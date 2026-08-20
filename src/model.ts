@@ -1,4 +1,5 @@
 import {
+  AbstractPaneItem,
   Disposable,
   Dock,
   Emitter,
@@ -37,7 +38,7 @@ export function isSafeSignal (signal: string): signal is Signal {
 /**
  * The representation of a terminal in the Pulsar workspace.
  */
-export class TerminalModel {
+export class TerminalModel implements AbstractPaneItem {
   static is (other: unknown): other is TerminalModel {
     return other instanceof TerminalModel;
   }
@@ -133,19 +134,16 @@ export class TerminalModel {
 
 
     if (cwd) {
-      // TODO: Ideally, we'd be able to keep `cwd` up to date even when it's
-      // changed via `cd` and other commands. VS Code can only do this by
-      // integrating into the shell; the approach is different for bash vs zsh
-      // vs fish vs PowerShell.
-      //
-      // So for now, we'll store the original `cwd` we decided on upon
-      // creation, and that'll have to do. This is what will be used as the
-      // initial `cwd` if the user duplicates this pane item — as would happen
-      // if a pane were split.
       this.url.searchParams.set('cwd', cwd);
     }
 
     return cwd;
+  }
+
+  setCwd (newCwd: string | undefined) {
+    this.cwd = newCwd;
+    this.url.searchParams.set('cwd', newCwd ?? '');
+    this.emitter.emit('did-change-path', this.getPath());
   }
 
   async initialize () {
@@ -221,6 +219,10 @@ export class TerminalModel {
 
   onDidChangeModified (callback: (newValue: boolean) => unknown) {
     return this.emitter.on('did-change-modified', callback);
+  }
+
+  onDidChangePath (callback: (newPath: boolean) => unknown) {
+    return this.emitter.on('did-change-path', callback);
   }
 
   handleNewData () {

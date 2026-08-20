@@ -42,5 +42,5 @@ export function debug (...args: unknown[]) {
 export function error (...args: unknown[]) {
   if (!enabled) return;
   args.unshift(TAG);
-  console.debug(...args);
+  console.error(...args);
 }

@@ -189,7 +189,7 @@ describe('TerminalElement', () => {
   });
 
   it('getCwd() returns the correct cwd', async () => {
-    element.model.cwd = tmpdir;
+    element.model.setCwd(tmpdir);
     expect(await element.getCwd()).toBe(tmpdir);
   });
 

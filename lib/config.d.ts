@@ -47,6 +47,13 @@ export declare function getConfigSchema(): {
                 default: string;
                 order: number;
             };
+            enableShellIntegration: {
+                title: string;
+                description: string;
+                type: string;
+                default: boolean;
+                order: number;
+            };
             env: {
                 title: string;
                 description: string;
