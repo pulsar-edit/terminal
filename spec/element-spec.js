@@ -351,7 +351,10 @@ describe('TerminalElement', () => {
       atom.config.set('terminal.behavior.hyperlinkPathBehavior', 'all-explorer');
       let uri = require('url').pathToFileURL(filePath).toString();
       element.activateLink(new MouseEvent('click'), uri);
-      expect(shell.showItemInFolder).toHaveBeenCalled();
+      // `shell.showItemInFolder` expects a plain filesystem path, not a
+      // `file://` URI — passing the URI through unconverted would open (or
+      // silently fail to open) the wrong thing depending on platform.
+      expect(shell.showItemInFolder).toHaveBeenCalledWith(filePath);
     });
     it('opens an existing file in Pulsar (when configured)', async () => {
       let filePath = path.join(tmpdir, 'example.txt');

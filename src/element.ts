@@ -512,7 +512,13 @@ export class TerminalElement extends HTMLElement {
       behavior === 'dir-explorer-file-pulsar';
 
     // Convert the `file://` URL to the format expected by Node APIs.
-    let linkPath = fileURLToPath(uri);
+    let linkPath;
+    try {
+      linkPath = fileURLToPath(uri);
+    } catch (err) {
+      console.warn('[terminal] Did not open malformed URI because it did not resolve to a path:', uri);
+      return;
+    }
 
     // Nonexistent file paths don't have anything to handle.
     if (!fs.existsSync(linkPath)) return;
@@ -531,7 +537,7 @@ export class TerminalElement extends HTMLElement {
     } else {
       // We want to open the file's parent directory in the file explorer and
       // select this specific file.
-      shell.showItemInFolder(uri);
+      shell.showItemInFolder(linkPath);
     }
   }
 
