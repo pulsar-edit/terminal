@@ -250,6 +250,32 @@ describe('TerminalElement', () => {
       });
     });
 
+    describe('local-path-detection', () => {
+      const { LocalPathLinkProvider } = require('../lib/link-detection/provider');
+
+      beforeEach(() => {
+        spyOn(Terminal.prototype, 'registerLinkProvider').andCallThrough();
+      });
+
+      it('is registered if configured as such', async () => {
+        atom.config.set('terminal.xterm.localPathDetection', true);
+        await createElement();
+        let wasAdded = Terminal.prototype.registerLinkProvider.calls.some((call) => {
+          return call.args[0] instanceof LocalPathLinkProvider;
+        });
+        expect(wasAdded).toBe(true);
+      });
+
+      it('is not registered if configured otherwise', async () => {
+        atom.config.set('terminal.xterm.localPathDetection', false);
+        await createElement();
+        let wasAdded = Terminal.prototype.registerLinkProvider.calls.some((call) => {
+          return call.args[0] instanceof LocalPathLinkProvider;
+        });
+        expect(wasAdded).toBe(false);
+      });
+    });
+
     describe('webgl', () => {
       it('is enabled if configured as such', async () => {
         atom.config.set('terminal.xterm.webgl', true);
@@ -556,6 +582,82 @@ describe('TerminalElement', () => {
       await write(localElement.terminal, '\x1b]633;C\x07');
 
       expect(spy.calls[0].args[0].commandLine).toBeUndefined();
+    });
+  });
+
+  describe('activateLocalPathLink()', () => {
+    const utils = require('../lib/utils');
+
+    beforeEach(() => {
+      spyOn(atom.workspace, 'open');
+      spyOn(shell, 'openPath');
+      spyOn(shell, 'showItemInFolder');
+    });
+
+    describe('when a modifier is required and not held', () => {
+      it('takes no action', () => {
+        atom.config.set('terminal.behavior.requireModifierToOpenUrls', true);
+        spyOn(utils, 'isMac').andReturn(false);
+        element.activateLocalPathLink({ ctrlKey: false, metaKey: false }, tmpdir, true);
+        expect(shell.openPath).not.toHaveBeenCalled();
+        expect(atom.workspace.open).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('when a modifier is required and held', () => {
+      beforeEach(() => {
+        atom.config.set('terminal.behavior.requireModifierToOpenUrls', true);
+        spyOn(utils, 'isMac').andReturn(false);
+      });
+
+      it('opens a directory via the shell, under the default behavior', () => {
+        atom.config.set('terminal.behavior.localPathBehavior', 'dir-explorer-file-pulsar');
+        element.activateLocalPathLink({ ctrlKey: true }, tmpdir, true);
+        expect(shell.openPath).toHaveBeenCalledWith(tmpdir);
+      });
+
+      it('opens a file in Pulsar, under the default behavior', () => {
+        atom.config.set('terminal.behavior.localPathBehavior', 'dir-explorer-file-pulsar');
+        let filePath = path.join(tmpdir, 'some-file.txt');
+        element.activateLocalPathLink({ ctrlKey: true }, filePath, false);
+        expect(atom.workspace.open).toHaveBeenCalledWith(filePath);
+        expect(shell.showItemInFolder).not.toHaveBeenCalled();
+      });
+
+      it('opens a file at the given (1-based) line and column, converted to 0-based', () => {
+        atom.config.set('terminal.behavior.localPathBehavior', 'dir-explorer-file-pulsar');
+        let filePath = path.join(tmpdir, 'some-file.txt');
+        element.activateLocalPathLink({ ctrlKey: true }, filePath, false, 12, 34);
+        expect(atom.workspace.open).toHaveBeenCalledWith(filePath, {
+          initialLine: 11,
+          initialColumn: 33
+        });
+      });
+
+      it('opens a file at the given line with no column, defaulting the column to 0-based 0', () => {
+        atom.config.set('terminal.behavior.localPathBehavior', 'dir-explorer-file-pulsar');
+        let filePath = path.join(tmpdir, 'some-file.txt');
+        element.activateLocalPathLink({ ctrlKey: true }, filePath, false, 12);
+        expect(atom.workspace.open).toHaveBeenCalledWith(filePath, {
+          initialLine: 11,
+          initialColumn: 0
+        });
+      });
+
+      it('reveals a file via the shell, under the "all-explorer" behavior', () => {
+        atom.config.set('terminal.behavior.localPathBehavior', 'all-explorer');
+        let filePath = path.join(tmpdir, 'some-file.txt');
+        element.activateLocalPathLink({ ctrlKey: true }, filePath, false);
+        expect(shell.showItemInFolder).toHaveBeenCalledWith(filePath);
+        expect(atom.workspace.open).not.toHaveBeenCalled();
+      });
+    });
+
+    it('does not require a modifier when disabled in settings', () => {
+      atom.config.set('terminal.behavior.requireModifierToOpenUrls', false);
+      atom.config.set('terminal.behavior.localPathBehavior', 'dir-explorer-file-pulsar');
+      element.activateLocalPathLink({ ctrlKey: false, metaKey: false }, tmpdir, true);
+      expect(shell.openPath).toHaveBeenCalledWith(tmpdir);
     });
   });
 });

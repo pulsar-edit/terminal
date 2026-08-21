@@ -37,6 +37,7 @@ import { getTheme } from './themes';
 import { shell } from '@electron/remote';
 import { getShellIntegrationInjection } from './shell-integration';
 import { ShellIntegrationAddon } from './shell-integration/addon';
+import { LocalPathLinkProvider } from './link-detection/provider';
 
 // Given a line height and a font size, attempts to adjust the line height so
 // that it results in a pixel height that snaps to the nearest pixel (or
@@ -452,29 +453,6 @@ export class TerminalElement extends HTMLElement {
           }
         )
       );
-
-      // Increase or decrease the font size when holding `Ctrl` and moving the
-      // mouse wheel up/down.
-      // TODO: Do we need this?
-      // this.div.terminal.addEventListener(
-      //   'wheel',
-      //   (event) => {
-      //     if (!event.ctrlKey) return;
-      //     if (!atom.config.get('editor.zoomFontWhenCtrlScrolling')) return;
-      //     let fontSizeSchema = atom.config.getSchema('terminal.appearance.fontSize');
-      //     event.stopPropagation();
-      //
-      //     let delta = event.deltaY < 0 ? 1 : -1;
-      //     let fontSize = Config.get('appearance.fontSize') + delta;
-      //     if (fontSize < fontSizeSchema.minimum) {
-      //       fontSize = fontSizeSchema.minimum;
-      //     } else if (fontSize > fontSizeSchema.maximum) {
-      //       fontSize = fontSizeSchema.maximum;
-      //     }
-      //     Config.set('appearance.fontSize', fontSize);
-      //   },
-      //   { capture: true }
-      // );
     } catch (error) {
       initializeReject!(error);
       throw error;
@@ -995,6 +973,46 @@ export class TerminalElement extends HTMLElement {
     });
   }
 
+  // Activates a path detected by `LocalPathLinkProvider`. `targetPath` is
+  // already an absolute, filesystem-verified path (not a URI) by the time it
+  // reaches here — resolution and validation both happen in the provider.
+  //
+  // This is a smaller, standalone counterpart to the `activateLink()` method
+  // on the (separate, not-yet-landed) `hyperlinks` branch, which handles the
+  // analogous case for OSC 8 hyperlinks. The two aren't shared code today
+  // since that branch doesn't exist here, but they're kept deliberately
+  // parallel so they can be unified with little rework once it lands.
+  activateLocalPathLink (event: MouseEvent, targetPath: string, isDirectory: boolean, line?: number, column?: number) {
+    if (Config.get('behavior.requireModifierToOpenUrls')) {
+      let modifier = isMac() ? event.metaKey : event.ctrlKey;
+      if (!modifier) {
+        this.optionallyWarnAboutModifierlessClick();
+        return;
+      }
+    }
+
+    const behavior = Config.get('behavior.localPathBehavior');
+    const openDirectoriesInExplorer = isDirectory && behavior !== 'all-pulsar';
+    const openFilesInExplorer = !isDirectory && behavior === 'all-explorer';
+
+    if (openDirectoriesInExplorer || openFilesInExplorer) {
+      if (isDirectory) {
+        shell.openPath(targetPath);
+      } else {
+        shell.showItemInFolder(targetPath);
+      }
+    } else if (line !== undefined) {
+      // `initialLine`/`initialColumn` are 0-based; our parsed line/column
+      // numbers are 1-based, as printed by the tool that produced them.
+      atom.workspace.open(targetPath, {
+        initialLine: line - 1,
+        initialColumn: (column ?? 1) - 1
+      });
+    } else {
+      atom.workspace.open(targetPath);
+    }
+  }
+
   async createTerminal () {
     if (this.createdPromise) {
       await this.createdPromise;
@@ -1105,6 +1123,16 @@ export class TerminalElement extends HTMLElement {
         this.#shellIntegrationAddon.onDidFinishCommand((command) => {
           Logger.debug('Shell integration: command finished:', command);
         })
+      );
+    }
+
+    if (Config.get('xterm.localPathDetection')) {
+      this.terminal.registerLinkProvider(
+        new LocalPathLinkProvider(
+          this.terminal,
+          () => this.model?.getPath(),
+          (event, targetPath, isDirectory, line, column) => this.activateLocalPathLink(event, targetPath, isDirectory, line, column)
+        )
       );
     }
 

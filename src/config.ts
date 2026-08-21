@@ -160,18 +160,25 @@ export function getConfigSchema () {
           order: 1,
           default: true
         },
+        localPathDetection: {
+          title: 'Local Path Detection',
+          description: `Detect local filesystem paths in terminal output (e.g. from \`ls\`, compiler errors, stack traces) and make them clickable. Relative paths are resolved against the shell's current directory when known. (Note the **Require Modifier to Open URLs** and **Local Path Behavior** settings below.)`,
+          type: 'boolean',
+          order: 2,
+          default: true
+        },
         ligatures: {
           title: 'Ligatures',
           description: `Enable [ligature support](https://github.com/xtermjs/xterm.js/tree/master/addons/addon-ligatures). Required if you use a coding font that combines sequences like \`==\` and \`>=\` into special glyphs. Disabling this option will result in these sequences being rendered as individual characters.`,
           type: 'boolean',
-          order: 2,
+          order: 3,
           default: true
         },
         additionalOptions: {
           title: 'Additional Options',
           description: `Options to apply to XTerm terminal objects; [consult the reference](https://xtermjs.org/docs/api/terminal/interfaces/iterminaloptions/#properties). (Accepts a stringified JSON object.)`,
           type: 'string',
-          order: 3,
+          order: 4,
           default: '{}'
         }
       }
@@ -357,7 +364,7 @@ export function getConfigSchema () {
         },
         requireModifierToOpenUrls: {
           title: 'Require Modifier to Open URLs',
-          description: `When enabled, you must hold down ${isMac() ? '`Cmd`' : '`Ctrl`'} while clicking on a URL in order to open it.`,
+          description: `When enabled, you must hold down ${isMac() ? '`Cmd`' : '`Ctrl`'} while clicking on a URL — or a detected local file path — in order to open it.`,
           type: 'boolean',
           default: true,
           order: 8
@@ -386,6 +393,31 @@ export function getConfigSchema () {
           ],
           default: 'dir-explorer-file-pulsar',
           order: 9
+        },
+        localPathBehavior: {
+          title: 'Local Path Behavior',
+          description: `How to open a local filesystem path detected in terminal output.`,
+          // If directories are handled by Pulsar, clicking on a directory _within_ the current project will reveal it in the tree view; clicking on a directory _outside_ the current project will open a new window for that project.
+          type: 'string',
+          enum: [
+            // TODO: The "All in Pulsar" option will have to wait until the
+            // `tree-view` service gets some more features.
+            //
+            // {
+            //   value: 'all-pulsar',
+            //   label: 'All in Pulsar'
+            // },
+            {
+              value: 'all-explorer',
+              label: `All in ${EXPLORER}`
+            },
+            {
+              value: 'dir-explorer-file-pulsar',
+              label: `Directories in ${EXPLORER}, files in Pulsar`
+            },
+          ],
+          default: 'dir-explorer-file-pulsar',
+          order: 10
         }
       }
     },
