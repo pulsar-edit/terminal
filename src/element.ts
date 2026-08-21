@@ -487,7 +487,7 @@ export class TerminalElement extends HTMLElement {
 
     // If we get this far, we're dealing with a file path. The way we respond
     // to various paths depends upon the user's configuration.
-    const behavior = Config.get('behavior.hyperlinkPathBehavior');
+    const behavior = Config.get('behavior.localPathBehavior');
     const openDirectoriesInPulsar = behavior === 'all-pulsar';
     const openFilesInPulsar = behavior === 'all-pulsar' ||
       behavior === 'dir-explorer-file-pulsar';
@@ -973,15 +973,12 @@ export class TerminalElement extends HTMLElement {
     });
   }
 
-  // Activates a path detected by `LocalPathLinkProvider`. `targetPath` is
-  // already an absolute, filesystem-verified path (not a URI) by the time it
-  // reaches here — resolution and validation both happen in the provider.
-  //
-  // This is a smaller, standalone counterpart to the `activateLink()` method
-  // on the (separate, not-yet-landed) `hyperlinks` branch, which handles the
-  // analogous case for OSC 8 hyperlinks. The two aren't shared code today
-  // since that branch doesn't exist here, but they're kept deliberately
-  // parallel so they can be unified with little rework once it lands.
+  /**
+   * Activates a path detected by `LocalPathLinkProvider`. `targetPath` is
+   * already an absolute, filesystem-verified path (not a URI) by the time it
+   * reaches this method; resolution and validation both happen in the
+   * provider.
+   */
   activateLocalPathLink (event: MouseEvent, targetPath: string, isDirectory: boolean, line?: number, column?: number) {
     if (Config.get('behavior.requireModifierToOpenUrls')) {
       let modifier = isMac() ? event.metaKey : event.ctrlKey;

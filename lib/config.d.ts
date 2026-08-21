@@ -105,6 +105,13 @@ export declare function getConfigSchema(): {
                 order: number;
                 default: boolean;
             };
+            localPathDetection: {
+                title: string;
+                description: string;
+                type: string;
+                order: number;
+                default: boolean;
+            };
             ligatures: {
                 title: string;
                 description: string;
@@ -260,7 +267,7 @@ export declare function getConfigSchema(): {
                 default: boolean;
                 order: number;
             };
-            hyperlinkPathBehavior: {
+            localPathBehavior: {
                 title: string;
                 description: string;
                 type: string;

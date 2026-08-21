@@ -47,6 +47,13 @@ export declare class TerminalElement extends HTMLElement {
     getXtermOptions(): ITerminalOptions;
     setMainBackgroundColor(theme?: ITheme): void;
     optionallyWarnAboutModifierlessClick(): void;
+    /**
+     * Activates a path detected by `LocalPathLinkProvider`. `targetPath` is
+     * already an absolute, filesystem-verified path (not a URI) by the time it
+     * reaches this method; resolution and validation both happen in the
+     * provider.
+     */
+    activateLocalPathLink(event: MouseEvent, targetPath: string, isDirectory: boolean, line?: number, column?: number): void;
     createTerminal(): Promise<void>;
     waitForShellEnvironment(timeoutMs?: number): Promise<unknown>;
     updateTheme(): void;

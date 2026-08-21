@@ -363,7 +363,7 @@ describe('TerminalElement', () => {
 
     it('opens a directory externally (when `dir-explorer-file-pulsar` is configured)', () => {
       atom.config.set('terminal.behavior.requireModifierToOpenUrls', false);
-      atom.config.set('terminal.behavior.hyperlinkPathBehavior', 'dir-explorer-file-pulsar');
+      atom.config.set('terminal.behavior.locakPathBehavior', 'dir-explorer-file-pulsar');
       let uri = require('url').pathToFileURL(tmpdir).toString();
       let event = new MouseEvent('click');
       element.activateLink(event, uri);
@@ -375,7 +375,7 @@ describe('TerminalElement', () => {
       require('fs-extra').writeFileSync(filePath, 'hi');
       spyOn(shell, 'showItemInFolder');
       atom.config.set('terminal.behavior.requireModifierToOpenUrls', false);
-      atom.config.set('terminal.behavior.hyperlinkPathBehavior', 'all-explorer');
+      atom.config.set('terminal.behavior.localPathBehavior', 'all-explorer');
       let uri = require('url').pathToFileURL(filePath).toString();
       element.activateLink(new MouseEvent('click'), uri);
       // `shell.showItemInFolder` expects a plain filesystem path, not a
@@ -388,7 +388,7 @@ describe('TerminalElement', () => {
       require('fs-extra').writeFileSync(filePath, 'hi');
       spyOn(atom.workspace, 'open');
       atom.config.set('terminal.behavior.requireModifierToOpenUrls', false);
-      atom.config.set('terminal.behavior.hyperlinkPathBehavior', 'dir-explorer-file-pulsar');
+      atom.config.set('terminal.behavior.localPathBehavior', 'dir-explorer-file-pulsar');
       let uri = require('url').pathToFileURL(filePath).toString();
       element.activateLink(new MouseEvent('click'), uri);
       expect(atom.workspace.open).toHaveBeenCalled();
