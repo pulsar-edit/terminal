@@ -39,25 +39,29 @@ import { getShellIntegrationInjection } from './shell-integration';
 import { ShellIntegrationAddon } from './shell-integration/addon';
 import { LocalPathLinkProvider } from './link-detection/provider';
 
-// Given a line height and a font size, attempts to adjust the line height so
-// that it results in a pixel height that snaps to the nearest pixel (or
-// sub-pixel, taking device pixel ratio into account).
-//
-// In theory, this would be needed for synchronization with Pulsar, since the
-// editor code does something similar. In practice, though, line height values
-// seem to be applied differently in XTerm; a shared line-height value between
-// the editor and the terminal window results in much taller lines in the
-// terminal.
+/**
+ * Given a line height and a font size, attempts to adjust the line height so
+ * that it results in a pixel height that snaps to the nearest pixel (or
+ * sub-pixel, taking device pixel ratio into account).
+ *
+ * In theory, this would be needed for synchronization with Pulsar, since the
+ * editor code does something similar. In practice, though, line height values
+ * seem to be applied differently in XTerm; a shared line-height value between
+ * the editor and the terminal window results in much taller lines in the
+ * terminal.
+ */
 function clampLineHeight (lineHeight: number, fontSize: number) {
   let lineHeightInPx = fontSize * lineHeight;
   let roundedScaledLineHeightInPx = Math.round(lineHeightInPx * window.devicePixelRatio);
   return roundedScaledLineHeightInPx / (fontSize * window.devicePixelRatio);
 }
 
-// Takes a DOM `KeyboardEvent` whose default was already prevented and creates
-// a fresh event so we can re-propagate it upward. This allows certain key
-// bindings and key sequences to keep working even if some of their events are
-// swallowed by xterm.js.
+/**
+ * Takes a DOM `KeyboardEvent` whose default was already prevented and creates
+ * a fresh event so we can re-propagate it upward. This allows certain key
+ * bindings and key sequences to keep working even if some of their events are
+ * swallowed by xterm.js.
+ */
 function redispatchKeyboardEvent(originalEvent: KeyboardEvent, targetElement: EventTarget) {
   let newEvent = new KeyboardEvent(originalEvent.type, {
     bubbles: true,
@@ -76,13 +80,13 @@ function redispatchKeyboardEvent(originalEvent: KeyboardEvent, targetElement: Ev
   targetElement.dispatchEvent(newEvent);
 }
 
-type TerminalLinkHandlerOptions = {
+interface TerminalLinkHandlerOptions {
   activate(event: MouseEvent, text: string, range?: IBufferRange): unknown;
   hover(event: MouseEvent, text: string, range?: IBufferRange | IViewportRange, rangeType?: 'buffer' | 'viewport'): unknown;
   leave(event: MouseEvent, text: string, range?: IBufferRange): unknown;
 }
 
-type DelayedPresenceOptions<T> = {
+interface DelayedPresenceOptions<T> {
   /**
    * How long to wait in `pending-show` before transitioning to the `shown`
    * state.
@@ -530,10 +534,6 @@ export class TerminalElement extends HTMLElement {
     // To create the decoration that serves as our tooltip anchor element,
     // we must first create a marker on the correct row. This marker is
     // placed relative to where the cursor is right now.
-    //
-    // This information is not a lot of fun to retrieve! And we must
-    // account for scenarios where the cursor is off screen because we've
-    // scrolled up in the viewport.
     let {
       // This seems to correlate to the row offset that the cursor has
       // _if_ the viewport is scrolled all the way to the bottom.
@@ -544,17 +544,15 @@ export class TerminalElement extends HTMLElement {
       viewportY
     } = this.terminal.buffer.active;
 
-    // The meaning of `range.start.(y|x)` differs based on where the range
-    // came from:
+    // The meaning of `range.start.(y|x)` differs based on where the range came
+    // from:
     //
-    // * `IBufferRange` (OSC 8 links): 1-based index; absolute buffer
-    //   position.
+    // * `IBufferRange` (OSC 8 links): 1-based index; absolute buffer position.
     // * `IViewportRange` (plain URLs via `WebLinksAddon`): 0-based index;
     //   relative to the current viewport's top row.
     //
-    // `registerMarker`'s offset is always relative to the cursor's
-    // absolute buffer position, so we have to convert into that target
-    // space.
+    // `registerMarker`'s offset is always relative to the cursor's absolute
+    // buffer position, so we have to convert into that target space.
     let markerY: number;
     let x: number;
     if (rangeType === 'viewport') {
@@ -574,25 +572,24 @@ export class TerminalElement extends HTMLElement {
       width: range.end.y === range.start.y ? (range.end.x - range.start.x + 1) : 1
     });
 
-    // XTerm's documentation _claims_ to skip the registration of
-    // decorations when we're on the alt buffer (used by, e.g., `less` and
-    // `vim` and `top` and anything else complex enough to need the concept
-    // of a viewport and its own management of a scroll buffer).
+    // XTerm's documentation _claims_ to skip the registration of decorations
+    // when we're on the alt buffer (used by, e.g., `less` and `vim` and `top`
+    // and anything else complex enough to need the concept of a viewport and
+    // its own management of a scroll buffer).
     //
-    // Yet it _does not_ actually skip in this scenario! This is good for
-    // us; it would be a lot harder to deliver hover tooltips without this
-    // mechanism. The only caveat is that it does unconditionally set
-    // `display: none` on all alt-buffer decorations rather than attempt to
-    // discern whether they're present in the viewport. (It would not
-    // matter in our case; this whole code path is triggered when a user
-    // mouses over a link, so we can assume that the link is present in the
-    // viewport!)
+    // Yet it _does not_ actually skip in this scenario! This is good for us;
+    // it would be a lot harder to deliver hover tooltips without this
+    // mechanism. The only caveat is that it does unconditionally set `display:
+    // none` on all alt-buffer decorations rather than attempt to discern
+    // whether they're present in the viewport. (It would not matter in our
+    // case; this whole code path is triggered when a user mouses over a link,
+    // so we can assume that the link is present in the viewport!)
     //
     // A reading of the source code and the design of the decoration system
     // suggests that this is a documentation bug rather than a code bug.
-    // Nothing about this has changed in the XTerm 6.1.0 beta, and we
-    // expect that it won't change in the future… but we do still guard
-    // against a lack of decoration just in case!
+    // Nothing about this has changed in the XTerm 6.1.0 beta, and we expect
+    // that it won't change in the future… but we do still guard against a lack
+    // of decoration just in case!
     if (!decoration) return;
 
     this.tooltip = new CompositeDisposable();
@@ -613,11 +610,11 @@ export class TerminalElement extends HTMLElement {
       // it's almost certainly wrong.
       elem.style.display = '';
 
-      // All tooltip management is manual. We don't want to rely on a belief that
-      // `element` is being hovered by the mouse pointer (that's not safe to
-      // assume when a decoration spans multiple lines), so it's better to opt
-      // into `trigger: 'manual'` and have the tooltip appear instantly. The
-      // tooltip will be hidden later on by disposing the return value of
+      // All tooltip management is manual. We don't want to rely on a belief
+      // that `element` is being hovered by the mouse pointer (that's not safe
+      // to assume when a decoration spans multiple lines), so it's better to
+      // opt into `trigger: 'manual'` and have the tooltip appear instantly.
+      // The tooltip will be hidden later on by disposing the return value of
       // `atom.tooltips.add` — which we do automatically.
       //
       // This is not a big problem! The only downside of manual triggering is
@@ -660,8 +657,7 @@ export class TerminalElement extends HTMLElement {
     // a link. To do this in XTerm.js, we'd have to implement our own link
     // provider _instead of_ WebLinksAddon, so this is annoying.
     //
-    // Even worse: that'd only work for URLs in the terminal, and not for OSC 8
-    // hyperlinks (for which there is no easy way to accomplish this either).
+    // It'd also only work for URLs in the terminal, not for OSC 8 links.
   }
 
   // Called when the user mouses away from a link; schedules the hiding of the
@@ -679,9 +675,11 @@ export class TerminalElement extends HTMLElement {
     this.linkTooltip.leave({ range: operativeRange, uri });
   }
 
-  // Open the given URI within Pulsar.
-  //
-  // Exact behavior varies according to the user's configuration.
+  /**
+   * Open the given URI within Pulsar.
+   *
+   * Exact behavior varies according to the user's configuration.
+   */
   async openInPulsar (uri: string, isDirectory: boolean = false) {
     let linkPath = fileURLToPath(uri);
     let contains = atom.project.contains(linkPath);
@@ -693,7 +691,7 @@ export class TerminalElement extends HTMLElement {
         // But that is the goal.
       }
     } else {
-      // Whether the path within the project or outside of it, we'll open it
+      // Whether the path is within the project or outside of it, we'll open it
       // for editing in this window.
       await atom.workspace.open(linkPath);
     }
