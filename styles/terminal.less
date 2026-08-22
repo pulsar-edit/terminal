@@ -4,7 +4,10 @@
 @import "octicon-mixins";
 @import "syntax-variables";
 
-pulsar-terminal {
+// Targets `TERMINAL_ELEMENT_ATTRIBUTE` (src/element.ts) rather than the tag
+// name — the element sets this on itself in `initialize()` specifically so
+// this selector never has to change even if the tag name does.
+[data-pulsar-terminal] {
   display: flex;
   flex-direction: column;
   // Somehow setting a z-index here appears to solve an issue where the entire

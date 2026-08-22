@@ -1,6 +1,21 @@
 import { Signal, TerminalModel } from './model';
 import { ITerminalOptions, ITheme, Terminal as XTerminal } from '@xterm/xterm';
 import { Pty } from './pty';
+/**
+ * A stable marker the element sets on itself in `initialize()` (not the
+ * constructor — see the comment there), regardless of what its tag name
+ * happens to be. See `getElementName()` in `utils.ts` for why that can vary.
+ * Everything that needs to find a terminal element (styles, keymaps, the
+ * context menu, command scoping, `.closest()` lookups) should target this
+ * attribute instead of the tag name.
+ *
+ * This is needed at least temporarily so that an instance of this package can
+ * be linked via `ppm` and shadow the builtin `terminal` package. It will no
+ * longer be needed once Pulsar ships a version of `terminal` that does not
+ * unconditionally register the `pulsar-terminal` element name at `require`
+ * time.
+ */
+export declare const TERMINAL_ELEMENT_ATTRIBUTE = "data-pulsar-terminal";
 export declare class TerminalElement extends HTMLElement {
     #private;
     model?: TerminalModel;
@@ -53,3 +68,4 @@ export declare class TerminalElement extends HTMLElement {
     hide(): void;
     show(): void;
 }
+export declare function registerTerminalElement(): void;
