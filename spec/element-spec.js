@@ -8,6 +8,7 @@ const { TerminalModel } = require('../lib/model');
 const { Terminal } = require('@xterm/xterm');
 const { Pty } = require('../lib/pty');
 const { ShellIntegrationAddon } = require('../lib/shell-integration/addon');
+const { getElementName } = require('../lib/utils');
 
 const {
   activatePackage,
@@ -142,6 +143,39 @@ describe('TerminalElement', () => {
 
   it('initializes with the correct session ID', () => {
     expect(element.getAttribute('session-id')).toBe('some-session-id');
+  });
+
+  // Exercises the exact path a real `atom.workspace.open()` uses, rather
+  // than assuming it behaves identically to `TerminalElement.create()`
+  // called directly.
+  it('creates a working element via the registered view provider (atom.views.getView), not just via TerminalElement.create() directly', async () => {
+    let terminals = new Set();
+    let model = new TerminalModel({ uri: `terminal://view-provider-test/`, terminals });
+    await model.ready();
+    model.pane = jasmine.createSpyObj('pane', [
+      'removeItem',
+      'getActiveItem',
+      'destroyItem'
+    ]);
+
+    let view = atom.views.getView(model);
+    createdElements.push(view);
+
+    expect(view).toBeTruthy();
+    expect(typeof view.initialize).toBe('function');
+  });
+
+  // Bypasses both `TerminalElement.create()` and `atom.views.getView()` to
+  // isolate whether the browser's own custom-element registry produces a
+  // properly-upgraded element in this environment at all, independent of
+  // whichever tag name `getElementName()` picked.
+  it('produces a properly-upgraded element via document.createElement(getElementName()) directly', () => {
+    let directElement = document.createElement(getElementName());
+    createdElements.push(directElement);
+
+    expect(typeof directElement.initialize).toBe('function');
+    expect(directElement.constructor?.name).toBe('TerminalElement');
+    expect(directElement.ownerDocument).toBe(document);
   });
 
   describe('destroy()', () => {
