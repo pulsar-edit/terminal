@@ -5,13 +5,15 @@ const fs = require('fs-extra');
 const path = require('path');
 const temp = require('temp');
 
+const { PACKAGE_NAME, BASE_URI } = require('../lib/utils');
+
 temp.track();
 
 describe('TerminalModel', () => {
   let model, pane, element, tmpdir, uri, terminals;
 
   beforeEach(async () => {
-    uri = 'terminal://some-session-id';
+    uri = `${BASE_URI}some-session-id`;
     terminals = new Set();
     model = new TerminalModel({ uri, terminals });
     await model.ready();
@@ -35,7 +37,7 @@ describe('TerminalModel', () => {
   afterEach(async () => await temp.cleanup());
 
   it('handles a previous active item that has no getPath() method', async () => {
-    atom.config.set('terminal.terminal.useProjectRootAsCwd', true);
+    atom.config.set(`${PACKAGE_NAME}.terminal.useProjectRootAsCwd`, true);
     atom.project.setPaths([tmpdir]);
     spyOn(atom.workspace, 'getActivePaneItem').andReturn({});
     let newModel = new TerminalModel({ uri, terminals });
@@ -44,7 +46,7 @@ describe('TerminalModel', () => {
   });
 
   it('handles a previous active item whose getPath() method returns a directory', async () => {
-    atom.config.set('terminal.terminal.useProjectRootAsCwd', true);
+    atom.config.set(`${PACKAGE_NAME}.terminal.useProjectRootAsCwd`, true);
     let someOtherTmpDir = await temp.mkdir();
     let previousActiveItem = jasmine.createSpyObj('somemodel', ['getPath']);
     atom.project.setPaths([someOtherTmpDir, tmpdir]);
@@ -56,7 +58,7 @@ describe('TerminalModel', () => {
   });
 
   it('handles a previous active item whose getPath() method returns a file', async () => {
-    atom.config.set('terminal.terminal.useProjectRootAsCwd', true);
+    atom.config.set(`${PACKAGE_NAME}.terminal.useProjectRootAsCwd`, true);
     let someOtherTmpDir = await temp.mkdir();
     let previousActiveItem = jasmine.createSpyObj('somemodel', ['getPath']);
     atom.project.setPaths([someOtherTmpDir, tmpdir]);
@@ -68,7 +70,7 @@ describe('TerminalModel', () => {
   });
 
   it('handles a previous active item that has a "selectedPath" property that returns a directory', async () => {
-    atom.config.set('terminal.terminal.useProjectRootAsCwd', true);
+    atom.config.set(`${PACKAGE_NAME}.terminal.useProjectRootAsCwd`, true);
     let someOtherTmpDir = await temp.mkdir();
     atom.project.setPaths([someOtherTmpDir, tmpdir]);
     let previousActiveItem = {};
@@ -80,7 +82,7 @@ describe('TerminalModel', () => {
   });
 
   it('handles a previous active item that has a "selectedPath" property that returns a file', async () => {
-    atom.config.set('terminal.terminal.useProjectRootAsCwd', true);
+    atom.config.set(`${PACKAGE_NAME}.terminal.useProjectRootAsCwd`, true);
     let someOtherTmpDir = await temp.mkdir();
     atom.project.setPaths([someOtherTmpDir, tmpdir]);
     let previousActiveItem = {};
@@ -165,7 +167,7 @@ describe('TerminalModel', () => {
     });
 
     it('adds the active indicator to the title when active', () => {
-      atom.config.set('terminal.terminal.activeTerminalIndicator', '⦿ ');
+      atom.config.set(`${PACKAGE_NAME}.terminal.activeTerminalIndicator`, '⦿ ');
       spyOn(model, 'isActive').andReturn(true);
       expect(model.getTitle()).toBe('⦿ Terminal');
     });
@@ -511,7 +513,7 @@ describe('TerminalModel', () => {
 
   describe('isActive()', () => {
     beforeEach(() => {
-      atom.config.set('terminal.behavior.activeTerminalLogic', 'visible');
+      atom.config.set(`${PACKAGE_NAME}.behavior.activeTerminalLogic`, 'visible');
     });
 
     it('works when the terminal is visible and active', () => {
@@ -533,7 +535,7 @@ describe('TerminalModel', () => {
     });
 
     it('works when the terminal is invisible and active (and we have opted into it via config)', () => {
-      atom.config.set('terminal.behavior.activeTerminalLogic', 'all');
+      atom.config.set(`${PACKAGE_NAME}.behavior.activeTerminalLogic`, 'all');
       model.activeIndex = 0;
       spyOn(model, 'isVisible').andReturn(false);
       expect(model.isActive()).toBe(true);
@@ -587,7 +589,7 @@ describe('TerminalModel', () => {
     });
 
     it("activeTerminalLogic = 'all'", () => {
-      atom.config.set('terminal.behavior.activeTerminalLogic', 'all');
+      atom.config.set(`${PACKAGE_NAME}.behavior.activeTerminalLogic`, 'all');
       const terminals = createTerminals(2);
       spyOn(terminals[0], "isVisible").andReturn(false);
       spyOn(terminals[1], "isVisible").andReturn(true);

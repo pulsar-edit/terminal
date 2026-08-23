@@ -445,16 +445,16 @@ async function setAutoShell () {
   command ??= await which('powershell.exe', { nothrow: true });
   if (!command) return;
 
-  atom.config.set('terminal.terminal.shell', command);
+  atom.config.set(`${PACKAGE_NAME}.terminal.shell`, command);
 }
 
 export async function possiblySetAutoShell () {
-  if (localStorage.getItem('terminal.autoShellSet') !== null) {
+  if (localStorage.getItem(`${PACKAGE_NAME}.autoShellSet`) !== null) {
     return;
   }
   // We set the flag before we even run this logic. This means we'll set it
   // even if the logic fails/errors, but that's OK; we don't want more than one
   // bite at the apple.
-  localStorage.setItem('terminal.autoShellSet', 'true');
+  localStorage.setItem(`${PACKAGE_NAME}.autoShellSet`, 'true');
   return await setAutoShell();
 }

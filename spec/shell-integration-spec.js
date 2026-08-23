@@ -4,6 +4,7 @@ const fs = require('fs-extra');
 
 const { getShellIntegrationInjection } = require('../lib/shell-integration');
 const utils = require('../lib/utils');
+const { PACKAGE_NAME } = utils;
 
 const SCRIPT_ROOT = path.resolve(__dirname, '..', 'shell');
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -12,7 +13,7 @@ describe('getShellIntegrationInjection', () => {
   let zdotdir;
 
   beforeEach(() => {
-    atom.config.set('terminal.terminal.enableShellIntegration', true);
+    atom.config.set(`${PACKAGE_NAME}.terminal.enableShellIntegration`, true);
     // `injectZsh` derives this deterministically from the real username and
     // real `os.tmpdir()`, so we can predict it and clean it up afterward
     // without needing to mock the filesystem.
@@ -29,7 +30,7 @@ describe('getShellIntegrationInjection', () => {
   });
 
   it('declines to inject when disabled in settings', async () => {
-    atom.config.set('terminal.terminal.enableShellIntegration', false);
+    atom.config.set(`${PACKAGE_NAME}.terminal.enableShellIntegration`, false);
     let result = await getShellIntegrationInjection('/bin/bash', [], {});
     expect(result).toEqual({ enabled: false, reason: 'Disabled in settings' });
   });

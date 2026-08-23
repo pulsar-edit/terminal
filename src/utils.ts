@@ -1,4 +1,5 @@
 import * as os from 'os';
+import * as path from 'path';
 
 import { Config } from "./config";
 import { TerminalModel } from "./model";
@@ -29,36 +30,42 @@ export function windowsBuildNumber (): number | undefined {
   return buildNumber;
 }
 
-export const BASE_URI = `terminal://`;
-export const PACKAGE_NAME = 'terminal';
+// Compiled to `lib/utils.js` (Rollup's `preserveModules` mirrors `src/`
+// exactly — one file per module, and this one isn't nested any deeper than
+// `src/utils.ts` is), so the package root — where `package.json` lives — is
+// one level up from here. Reading the name from there instead of hardcoding
+// it means this constant can never drift out of sync with the package's
+// actual identity, whatever it's named at build time.
+const PACKAGE_ROOT = path.normalize(path.join(__dirname, '..'));
+const packageJson = require(path.join(PACKAGE_ROOT, 'package.json')) as { name: string };
+
+export const PACKAGE_NAME = packageJson.name;
+export const BASE_URI = `${PACKAGE_NAME}://`;
 
 export const DEFAULT_ELEMENT_NAME = 'pulsar-terminal';
 
 let elementName: string | undefined;
 
 /**
- * Picks (and memoizes) the tag name under which this package's custom element
- * gets registered.
+ * Picks (and memoizes) the tag name under which this package's custom
+ * element gets registered.
  *
  * Prefers `pulsar-terminal`. Falls back to a randomized name if that tag is
- * already claimed by the time this is first called; this can happen whenever
- * this package is dev-linked over a Pulsar release that still ships an early
- * version of the `terminal` package (one that unconditionally registers
- * `pulsar-terminal` even before package activation).
- *
- * Pulsar's package preload step unconditionally `require()`s every bundled
- * package's main module (see `Package.prototype.preload()` in Pulsar core),
- * before dev-linked packages get resolution priority, so the bundled copy's
- * registration can win the tag before this build's own `activate()` ever runs.
- *
- * Since `customElements.define()` can only ever claim a given tag name once,
- * the only way to guarantee this build's element gets used is not to contest
+ * already claimed by the time this is first called — which happens whenever
+ * this package is dev-linked over a Pulsar release that still ships its own
+ * bundled `terminal` package: Pulsar's package *preload* step
+ * unconditionally `require()`s every bundled package's main module (see
+ * `Package.prototype.preload()` in Pulsar core), before dev-linked packages
+ * get resolution priority, so the bundled copy's registration can win the
+ * tag before this build's own `activate()` ever runs. Since
+ * `customElements.define()` can only ever claim a given tag name once, the
+ * only way to guarantee this build's element gets used is to not contest
  * that tag at all when it's already spoken for.
  *
  * Nothing but `registerTerminalElement()`/`TerminalElement.create()` (in
- * `element.ts`) should ever need to know the actual tag name. Everything else
- * that needs to find a terminal element (styles, keymaps, the context menu,
- * command scoping, `.closest()` lookups) should target
+ * `element.ts`) should ever need to know the actual tag name — everything
+ * else that needs to find a terminal element (styles, keymaps, the context
+ * menu, command scoping, `.closest()` lookups, the e2e tests) should target
  * `TERMINAL_ELEMENT_ATTRIBUTE` instead, a stable marker the element sets on
  * itself in `initialize()` regardless of what it's tagged as.
  */
