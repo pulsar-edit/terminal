@@ -6,8 +6,8 @@ import { Pty } from './pty';
  * constructor — see the comment there), regardless of what its tag name
  * happens to be. See `getElementName()` in `utils.ts` for why that can vary.
  * Everything that needs to find a terminal element (styles, keymaps, the
- * context menu, command scoping, `.closest()` lookups) should target this
- * attribute instead of the tag name.
+ * context menu, command scoping, `.closest()` lookups, the e2e tests) should
+ * target this attribute instead of the tag name.
  *
  * This is needed at least temporarily so that an instance of this package can
  * be linked via `ppm` and shadow the builtin `terminal` package. It will no
@@ -31,6 +31,7 @@ export declare class TerminalElement extends HTMLElement {
     private subscriptions;
     private initializedPromise?;
     private createdPromise?;
+    private restartingPromise?;
     private findPalette?;
     private tooltip?;
     private tooltipRange?;
@@ -74,6 +75,12 @@ export declare class TerminalElement extends HTMLElement {
      * provider.
      */
     activateLocalPathLink(event: MouseEvent, targetPath: string, isDirectory: boolean, line?: number, column?: number): void;
+    /**
+     * Instantiates a new terminal.
+     *
+     * Async; if a terminal creation is already in flight, subsequent calls will
+     * return the promise tied to the existing terminal creation.
+     */
     createTerminal(): Promise<void>;
     waitForShellEnvironment(timeoutMs?: number): Promise<unknown>;
     updateTheme(): void;
@@ -87,6 +94,12 @@ export declare class TerminalElement extends HTMLElement {
         force?: boolean;
     }): void;
     promptToStartup(): Promise<void>;
+    /**
+     * Starts or restarts the PTY.
+     *
+     * Async; if a process restart is already in flight, subsequent calls will
+     * return the promise tied to the existing restart.
+     */
     restartPtyProcess(): Promise<void>;
     clear(): void;
     sendSignal(signal: Signal): boolean;

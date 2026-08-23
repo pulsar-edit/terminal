@@ -1,0 +1,165 @@
+name: "E2E (shell integration)"
+
+# The specs for `terminal` can give us decent assurances, but some features are
+# impossible to test without an actual shell environment -- shell integration
+# being the most obvious. So the plan here is to add in E2E coverage via
+# Playwright for all the things we can't test in unit tests.
+#
+# Currently `bash`, `zsh`, `fish`, and `pwsh` on `ubuntu-latest` — OS doesn't
+# matter much for what this actually proves (the shell side of shell
+# integration), so macOS/Windows aren't part of the matrix yet; the shell
+# dimension is deliberately factored out now so that growing it is just
+# adding entries to `strategy.matrix.shell` below, not duplicating job
+# definitions.
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  pull_request:
+    paths:
+      - 'shell/**'
+      - 'src/shell-integration/**'
+      - 'e2e/**'
+      - '.github/workflows/e2e.yml'
+  workflow_dispatch: {}
+
+jobs:
+  e2e:
+    strategy:
+      fail-fast: false
+      matrix:
+        shell: [bash, zsh, fish, pwsh]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4.4.0
+        with:
+          node-version: 'lts/*'
+
+      - name: Install dependencies
+        run: npm install --verbose
+
+      - name: Build
+        run: npm run build
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      # `ubuntu-latest` ships some shells preinstalled already (bash always
+      # is), but installing explicitly rather than assuming keeps this from
+      # silently breaking if the runner image's preinstalled set ever
+      # changes — and it's what lets adding a new shell to the matrix above
+      # be the *only* change needed, for anything `apt` knows how to install
+      # under the same package name as its command (`fish` works the same
+      # way `zsh` does).
+      #
+      # `pwsh` is the exception: it isn't in Ubuntu's default apt sources at
+      # all (Microsoft's own repo would need to be registered first to `apt
+      # install` it) — but GitHub's hosted `ubuntu-latest` runners ship it
+      # preinstalled already, as one of their standard tools, so there's
+      # nothing to install here.
+      - name: Install ${{ matrix.shell }}
+        if: matrix.shell != 'pwsh'
+        run: sudo apt-get install -y ${{ matrix.shell }}
+
+      # A fresh `apt` install of zsh leaves its completion directories
+      # (under /usr/share/zsh) group/other-writable. Ubuntu's system-wide
+      # /etc/zsh/zshrc — sourced for every zsh session unconditionally,
+      # before our own ZDOTDIR-based injection ever gets control — runs
+      # `compinit` on startup, which treats writable completion directories
+      # as a security risk and drops into an interactive "Ignore insecure
+      # directories and continue [y] or abort compinit [n]?" prompt. That
+      # swallows whatever's typed next as its own answer — observed
+      # directly: the `c` of a test's `cd` got eaten this way, leaving a
+      # bogus `d` command behind. `compaudit` lists exactly the directories
+      # it would object to; stripping group/other write access from them
+      # keeps `compinit` from ever prompting.
+      - name: Fix zsh completion directory permissions
+        if: matrix.shell == 'zsh'
+        run: |
+          zsh -c 'autoload -Uz compaudit; compaudit' | xargs -r sudo chmod -R go-w
+
+      # Resolves to an absolute path (`which`) rather than passing
+      # `matrix.shell` straight through, because `getDefaultShell()`
+      # (src/config.ts) — and real shells' own expectations of `$SHELL` —
+      # want an absolute path, not a bare command name. Everything
+      # downstream (`openPulsar()` in e2e/helpers.js spreads `...process.env`
+      # into the launched app, and `getDefaultShell()` reads `SHELL` from
+      # there) picks this up with no further wiring.
+      - name: Resolve ${{ matrix.shell }}'s path
+        run: echo "SHELL=$(which ${{ matrix.shell }})" >> "$GITHUB_ENV"
+
+      - name: Install Pulsar
+        uses: pulsar-edit/action-pulsar-dependency@v3.4
+
+      # Deliberately `rebuild`, not `install`.
+      #
+      # `install` re-resolves dependencies from package.json using `ppm`'s own
+      # bundled (very old) `npm`, which chokes on this package.json's `npm:`
+      # alias for `node-pty` and looks for a package literally named `node-pty`
+      # at that version instead.
+      #
+      # `rebuild` instead just recompiles whatever's already sitting in
+      # `node_modules` (populated correctly above by a modern `npm`) against
+      # Pulsar's bundled Electron ABI — which is the only thing this step
+      # actually needs to do, since dependency resolution already happened.
+      - name: Rebuild native dependencies against the installed Pulsar
+        run: pulsar --package rebuild --verbose
+
+      # Runs before the E2E suite deliberately. If something's broken here,
+      # there's no reason to pay for the slower, more flake-prone E2E steps
+      # below.
+      #
+      # `pulsar --test` still launches a real (if automated) Electron window,
+      # so it needs a display server the same way the E2E run does.
+      - name: Run specs
+        uses: coactions/setup-xvfb@v1.0.1
+        with:
+          run: pulsar --test spec/
+
+      # `action-pulsar-dependency` installs Pulsar system-wide via `.deb` on
+      # Linux. This resolves the real Electron executable underneath the
+      # `pulsar` wrapper script the same way `pulsar-edit/pulsar`'s own smoke
+      # tests resolve `BINARY_NAME` for their AppImage build (see
+      # `.github/workflows/build.yml` there) — Playwright's `executablePath`
+      # needs the actual binary, not a wrapper script.
+      - name: Resolve Pulsar's real Electron executable
+        run: |
+          BINARY_PATH="$(dpkg -L pulsar | grep -E '/(usr/(lib|share)/pulsar|opt/Pulsar)/pulsar$' | head -n1)"
+          if [ -z "$BINARY_PATH" ]; then
+            echo "Could not resolve Pulsar's Electron executable from dpkg -L pulsar:" >&2
+            dpkg -L pulsar >&2
+            exit 1
+          fi
+          echo "BINARY_NAME=$BINARY_PATH" >> "$GITHUB_ENV"
+
+      # NOTE: this action's own post-run cleanup reliably logs
+      # `.../v1.0.1/dist/cleanup.sh: No such file or directory` after every
+      # run. This is packaging bug in the v1.0.1 release itself; its `dist/
+      # index.js` looks for `cleanup.sh` next to itself in `dist/`, but the
+      # release only shipped `cleanup.sh` at the repo root, so it's never
+      # actually there for any consumer of this tag.
+      #
+      # It's harmless: the call site wraps it in an empty `catch {}` and never
+      # calls `core.setFailed()`, so it can't fail this step or the job. Thus
+      # it's safe to ignore unless/until upstream ships a fixed tag.
+      - name: Run E2E tests
+        uses: coactions/setup-xvfb@v1.0.1
+        with:
+          run: npx playwright test
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          # Matrix-unique: `upload-artifact@v4` errors on a duplicate name
+          # within the same workflow run, and every matrix leg otherwise
+          # produces a `playwright-report` artifact.
+          name: playwright-report-${{ matrix.shell }}
+          path: |
+            report.xml
+            test-results/
+          retention-days: 7
