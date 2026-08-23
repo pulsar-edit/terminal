@@ -91,7 +91,13 @@ export default class Terminal {
     this.subscriptions.add(
       // Register a view provider for the terminal emulator.
       atom.views.addViewProvider(TerminalModel, (model) => {
-        let element = new TerminalElement();
+        // Not `new TerminalElement()`: direct construction of a registered
+        // custom element class is stricter than `document.createElement`
+        // about satisfying native `[[Construct]]` semantics, and throws
+        // "Illegal constructor" depending on how the class got compiled.
+        // `create()` uses the same `document.createElement` path as
+        // everywhere else this element gets built.
+        let element = TerminalElement.create();
         element.initialize(model as TerminalModel);
         return element;
       }),

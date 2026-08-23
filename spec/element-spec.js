@@ -8,8 +8,7 @@ const { TerminalModel } = require('../lib/model');
 const { Terminal } = require('@xterm/xterm');
 const { Pty } = require('../lib/pty');
 const { ShellIntegrationAddon } = require('../lib/shell-integration/addon');
-const { getElementName } = require('../lib/utils');
-
+const { PACKAGE_NAME, BASE_URI, getElementName } = require('../lib/utils');
 const {
   activatePackage,
   wait,
@@ -66,7 +65,7 @@ describe('TerminalElement', () => {
   let savedPlatform = process.platform;
   let element, tmpdir, workerProcess;
 
-  async function createElement (uri = `terminal://some-session-id/`) {
+  async function createElement (uri = `${BASE_URI}some-session-id/`) {
     let terminals = new Set();
     let model = new TerminalModel({ uri, terminals });
     await model.ready();
@@ -77,9 +76,18 @@ describe('TerminalElement', () => {
     ]);
 
     let terminalElement = TerminalElement.create();
-    await terminalElement.initialize(model);
-    await terminalElement.createTerminal();
+    // Append *before* `initialize()`, not after: the terminal itself isn't
+    // created synchronously by `initialize()` — that happens later, driven
+    // by an `IntersectionObserver` (observing `this.div.terminal`, rooted
+    // at the element itself) once the element registers as visible. That
+    // can only happen once the element is actually attached to the
+    // document, so appending first (rather than calling `createTerminal()`
+    // explicitly afterward, which used to race the observer here — see git
+    // history if curious) lets the observer do its one real job instead of
+    // competing with a second, redundant creation path.
     document.getElementById('jasmine-content').appendChild(terminalElement);
+    await terminalElement.initialize(model);
+    await terminalElement.ready();
     createdElements.push(terminalElement);
     return terminalElement;
   }
@@ -89,7 +97,7 @@ describe('TerminalElement', () => {
     await activatePackage();
     await atom.updateProcessEnvAndTriggerHooks();
 
-    atom.config.set('terminal.behavior.promptOnStartup', false);
+    atom.config.set(`${PACKAGE_NAME}.behavior.promptOnStartup`, false);
 
 
     let ptyProcess = jasmine.createSpyObj('ptyProcess', [
@@ -145,12 +153,15 @@ describe('TerminalElement', () => {
     expect(element.getAttribute('session-id')).toBe('some-session-id');
   });
 
-  // Exercises the exact path a real `atom.workspace.open()` uses, rather
-  // than assuming it behaves identically to `TerminalElement.create()`
-  // called directly.
+  // Every other test in this file goes through `createElement()`, which
+  // calls `TerminalElement.create()` directly — it never actually exercises
+  // `atom.views.addViewProvider()`'s registered callback, which is the
+  // exact path a real `atom.workspace.open()` (and the failing E2E test)
+  // uses. Checking this directly, rather than assuming the two paths behave
+  // identically.
   it('creates a working element via the registered view provider (atom.views.getView), not just via TerminalElement.create() directly', async () => {
     let terminals = new Set();
-    let model = new TerminalModel({ uri: `terminal://view-provider-test/`, terminals });
+    let model = new TerminalModel({ uri: `${BASE_URI}view-provider-test/`, terminals });
     await model.ready();
     model.pane = jasmine.createSpyObj('pane', [
       'removeItem',
@@ -240,13 +251,13 @@ describe('TerminalElement', () => {
 
   describe('getExtraXTermOptions()', () => {
     it('passes along values defined in the package config', () => {
-      atom.config.set('terminal.xterm.additionalOptions', `{ "foo": false }`);
+      atom.config.set(`${PACKAGE_NAME}.xterm.additionalOptions`, `{ "foo": false }`);
       expect(element.getExtraXTermOptions()).toEqual({ foo: false });
     });
 
     it('notifies the user when the config field is invalid JSON', () => {
       spyOn(atom.notifications, 'addError').andCallThrough();
-      atom.config.set('terminal.xterm.additionalOptions', `{ "foo": false`);
+      atom.config.set(`${PACKAGE_NAME}.xterm.additionalOptions`, `{ "foo": false`);
       expect(element.getExtraXTermOptions()).toEqual({});
       expect(atom.notifications.addError).toHaveBeenCalled();
     });
@@ -266,7 +277,7 @@ describe('TerminalElement', () => {
 
     describe('web-links', () => {
       it('is enabled if configured as such', async () => {
-        atom.config.set('terminal.xterm.webLinks', true);
+        atom.config.set(`${PACKAGE_NAME}.xterm.webLinks`, true);
         await createElement();
         let wasAdded = Terminal.prototype.loadAddon.calls.some((call) => {
           return call.args[0] instanceof WebLinksAddon;
@@ -275,7 +286,7 @@ describe('TerminalElement', () => {
       })
 
       it('is disabled if configured as such', async () => {
-        atom.config.set('terminal.xterm.webLinks', false);
+        atom.config.set(`${PACKAGE_NAME}.xterm.webLinks`, false);
         await createElement();
         let wasAdded = Terminal.prototype.loadAddon.calls.some((call) => {
           return call.args[0] instanceof WebLinksAddon;
@@ -292,7 +303,7 @@ describe('TerminalElement', () => {
       });
 
       it('is registered if configured as such', async () => {
-        atom.config.set('terminal.xterm.localPathDetection', true);
+        atom.config.set(`${PACKAGE_NAME}.xterm.localPathDetection`, true);
         await createElement();
         let wasAdded = Terminal.prototype.registerLinkProvider.calls.some((call) => {
           return call.args[0] instanceof LocalPathLinkProvider;
@@ -301,7 +312,7 @@ describe('TerminalElement', () => {
       });
 
       it('is not registered if configured otherwise', async () => {
-        atom.config.set('terminal.xterm.localPathDetection', false);
+        atom.config.set(`${PACKAGE_NAME}.xterm.localPathDetection`, false);
         await createElement();
         let wasAdded = Terminal.prototype.registerLinkProvider.calls.some((call) => {
           return call.args[0] instanceof LocalPathLinkProvider;
@@ -312,7 +323,7 @@ describe('TerminalElement', () => {
 
     describe('webgl', () => {
       it('is enabled if configured as such', async () => {
-        atom.config.set('terminal.xterm.webgl', true);
+        atom.config.set(`${PACKAGE_NAME}.xterm.webgl`, true);
         await createElement();
         let wasAdded = Terminal.prototype.loadAddon.calls.some((call) => {
           return call.args[0] instanceof WebglAddon;
@@ -321,7 +332,7 @@ describe('TerminalElement', () => {
       })
 
       it('is disabled if configured as such', async () => {
-        atom.config.set('terminal.xterm.webgl', false);
+        atom.config.set(`${PACKAGE_NAME}.xterm.webgl`, false);
         await createElement();
         let wasAdded = Terminal.prototype.loadAddon.calls.some((call) => {
           return call.args[0] instanceof WebglAddon;
@@ -356,7 +367,7 @@ describe('TerminalElement', () => {
     xit('handles a nonexistent command', async () => {
       currentReadyIntervalMs = 500;
       spyOn(atom.notifications, 'addError');
-      atom.config.set('terminal.terminal.shell', 'somecommand');
+      atom.config.set(`${PACKAGE_NAME}.terminal.shell`, 'somecommand');
       let restartPromise = element.restartPtyProcess();
       await wait(10);
       try {
@@ -373,21 +384,21 @@ describe('TerminalElement', () => {
 
   describe('activateLink()', () => {
     it('does nothing without the modifier key when one is required', () => {
-      atom.config.set('terminal.behavior.requireModifierToOpenUrls', true);
+      atom.config.set(`${PACKAGE_NAME}.behavior.requireModifierToOpenUrls`, true);
       let event = new MouseEvent('click', { metaKey: false, ctrlKey: false });
       element.activateLink(event, 'https://example.com');
       expect(shell.openExternal).not.toHaveBeenCalled();
     });
 
     it('opens a non-file URI externally when the modifier is held', () => {
-      atom.config.set('terminal.behavior.requireModifierToOpenUrls', true);
+      atom.config.set(`${PACKAGE_NAME}.behavior.requireModifierToOpenUrls`, true);
       let event = new MouseEvent('click', { metaKey: true, ctrlKey: true });
       element.activateLink(event, 'https://example.com');
       expect(shell.openExternal).toHaveBeenCalledWith('https://example.com');
     });
 
     it('does nothing for a file:// URI that does not exist on disk', () => {
-      atom.config.set('terminal.behavior.requireModifierToOpenUrls', false);
+      atom.config.set(`${PACKAGE_NAME}.behavior.requireModifierToOpenUrls`, false);
       spyOn(shell, 'showItemInFolder');
       let event = new MouseEvent('click');
       element.activateLink(event, 'file:///nonexistent/path/does-not-exist');
@@ -396,8 +407,8 @@ describe('TerminalElement', () => {
     });
 
     it('opens a directory externally (when `dir-explorer-file-pulsar` is configured)', () => {
-      atom.config.set('terminal.behavior.requireModifierToOpenUrls', false);
-      atom.config.set('terminal.behavior.locakPathBehavior', 'dir-explorer-file-pulsar');
+      atom.config.set(`${PACKAGE_NAME}.behavior.requireModifierToOpenUrls`, false);
+      atom.config.set(`${PACKAGE_NAME}.behavior.localPathBehavior`, 'dir-explorer-file-pulsar');
       let uri = require('url').pathToFileURL(tmpdir).toString();
       let event = new MouseEvent('click');
       element.activateLink(event, uri);
@@ -408,8 +419,8 @@ describe('TerminalElement', () => {
       let filePath = path.join(tmpdir, 'example.txt');
       require('fs-extra').writeFileSync(filePath, 'hi');
       spyOn(shell, 'showItemInFolder');
-      atom.config.set('terminal.behavior.requireModifierToOpenUrls', false);
-      atom.config.set('terminal.behavior.localPathBehavior', 'all-explorer');
+      atom.config.set(`${PACKAGE_NAME}.behavior.requireModifierToOpenUrls`, false);
+      atom.config.set(`${PACKAGE_NAME}.behavior.localPathBehavior`, 'all-explorer');
       let uri = require('url').pathToFileURL(filePath).toString();
       element.activateLink(new MouseEvent('click'), uri);
       // `shell.showItemInFolder` expects a plain filesystem path, not a
@@ -421,8 +432,8 @@ describe('TerminalElement', () => {
       let filePath = path.join(tmpdir, 'example.txt');
       require('fs-extra').writeFileSync(filePath, 'hi');
       spyOn(atom.workspace, 'open');
-      atom.config.set('terminal.behavior.requireModifierToOpenUrls', false);
-      atom.config.set('terminal.behavior.localPathBehavior', 'dir-explorer-file-pulsar');
+      atom.config.set(`${PACKAGE_NAME}.behavior.requireModifierToOpenUrls`, false);
+      atom.config.set(`${PACKAGE_NAME}.behavior.localPathBehavior`, 'dir-explorer-file-pulsar');
       let uri = require('url').pathToFileURL(filePath).toString();
       element.activateLink(new MouseEvent('click'), uri);
       expect(atom.workspace.open).toHaveBeenCalled();
@@ -531,11 +542,18 @@ describe('TerminalElement', () => {
     // real instance without reaching into `TerminalElement`'s private
     // `#shellIntegrationAddon` field (which, being a true private field,
     // isn't reachable from spec code at all).
+    //
+    // Takes the *last* matching call, not the first, as cheap insurance:
+    // `element.terminal` always reflects whichever `createTerminal()` run
+    // happened most recently, so if more than one ever ran for a given
+    // element (nothing currently causes that, but nothing guarantees only
+    // one addon ever gets loaded either), this stays correct rather than
+    // silently listening on a stale, already-replaced addon instance.
     function findShellIntegrationAddon () {
-      let matchingCall = Terminal.prototype.loadAddon.calls.find(
+      let matchingCalls = Terminal.prototype.loadAddon.calls.filter(
         (call) => call.args[0] instanceof ShellIntegrationAddon
       );
-      return matchingCall?.args[0];
+      return matchingCalls[matchingCalls.length - 1]?.args[0];
     }
 
     beforeEach(() => {
@@ -561,26 +579,26 @@ describe('TerminalElement', () => {
     });
 
     it('loads the addon when shell integration is enabled', async () => {
-      atom.config.set('terminal.terminal.enableShellIntegration', true);
+      atom.config.set(`${PACKAGE_NAME}.terminal.enableShellIntegration`, true);
       await createElement();
       expect(findShellIntegrationAddon()).toBeTruthy();
     });
 
     it('does not load the addon when shell integration is disabled', async () => {
-      atom.config.set('terminal.terminal.enableShellIntegration', false);
+      atom.config.set(`${PACKAGE_NAME}.terminal.enableShellIntegration`, false);
       await createElement();
       expect(findShellIntegrationAddon()).toBeUndefined();
     });
 
     it("updates the model's cwd when the terminal receives an OSC 633 Cwd sequence", async () => {
-      atom.config.set('terminal.terminal.enableShellIntegration', true);
+      atom.config.set(`${PACKAGE_NAME}.terminal.enableShellIntegration`, true);
       let localElement = await createElement();
       await write(localElement.terminal, `\x1b]633;P;Cwd=${tmpdir}\x07`);
       expect(localElement.model.cwd).toBe(tmpdir);
     });
 
     it("leaves the model's cwd alone when shell integration is disabled", async () => {
-      atom.config.set('terminal.terminal.enableShellIntegration', false);
+      atom.config.set(`${PACKAGE_NAME}.terminal.enableShellIntegration`, false);
       let localElement = await createElement();
       let cwdBefore = localElement.model.cwd;
       // With the addon never loaded, xterm has no OSC 633 handler at all, so
@@ -591,7 +609,7 @@ describe('TerminalElement', () => {
     });
 
     it('gives the addon the nonce from the injection result, gating command-line attribution', async () => {
-      atom.config.set('terminal.terminal.enableShellIntegration', true);
+      atom.config.set(`${PACKAGE_NAME}.terminal.enableShellIntegration`, true);
       let localElement = await createElement();
 
       let addonInstance = findShellIntegrationAddon();
@@ -605,7 +623,7 @@ describe('TerminalElement', () => {
     });
 
     it('does not attribute a command line reported under a stale nonce', async () => {
-      atom.config.set('terminal.terminal.enableShellIntegration', true);
+      atom.config.set(`${PACKAGE_NAME}.terminal.enableShellIntegration`, true);
       let localElement = await createElement();
 
       let addonInstance = findShellIntegrationAddon();
@@ -630,7 +648,7 @@ describe('TerminalElement', () => {
 
     describe('when a modifier is required and not held', () => {
       it('takes no action', () => {
-        atom.config.set('terminal.behavior.requireModifierToOpenUrls', true);
+        atom.config.set(`${PACKAGE_NAME}.behavior.requireModifierToOpenUrls`, true);
         spyOn(utils, 'isMac').andReturn(false);
         element.activateLocalPathLink({ ctrlKey: false, metaKey: false }, tmpdir, true);
         expect(shell.openPath).not.toHaveBeenCalled();
@@ -640,18 +658,18 @@ describe('TerminalElement', () => {
 
     describe('when a modifier is required and held', () => {
       beforeEach(() => {
-        atom.config.set('terminal.behavior.requireModifierToOpenUrls', true);
+        atom.config.set(`${PACKAGE_NAME}.behavior.requireModifierToOpenUrls`, true);
         spyOn(utils, 'isMac').andReturn(false);
       });
 
       it('opens a directory via the shell, under the default behavior', () => {
-        atom.config.set('terminal.behavior.localPathBehavior', 'dir-explorer-file-pulsar');
+        atom.config.set(`${PACKAGE_NAME}.behavior.localPathBehavior`, 'dir-explorer-file-pulsar');
         element.activateLocalPathLink({ ctrlKey: true }, tmpdir, true);
         expect(shell.openPath).toHaveBeenCalledWith(tmpdir);
       });
 
       it('opens a file in Pulsar, under the default behavior', () => {
-        atom.config.set('terminal.behavior.localPathBehavior', 'dir-explorer-file-pulsar');
+        atom.config.set(`${PACKAGE_NAME}.behavior.localPathBehavior`, 'dir-explorer-file-pulsar');
         let filePath = path.join(tmpdir, 'some-file.txt');
         element.activateLocalPathLink({ ctrlKey: true }, filePath, false);
         expect(atom.workspace.open).toHaveBeenCalledWith(filePath);
@@ -659,7 +677,7 @@ describe('TerminalElement', () => {
       });
 
       it('opens a file at the given (1-based) line and column, converted to 0-based', () => {
-        atom.config.set('terminal.behavior.localPathBehavior', 'dir-explorer-file-pulsar');
+        atom.config.set(`${PACKAGE_NAME}.behavior.localPathBehavior`, 'dir-explorer-file-pulsar');
         let filePath = path.join(tmpdir, 'some-file.txt');
         element.activateLocalPathLink({ ctrlKey: true }, filePath, false, 12, 34);
         expect(atom.workspace.open).toHaveBeenCalledWith(filePath, {
@@ -669,7 +687,7 @@ describe('TerminalElement', () => {
       });
 
       it('opens a file at the given line with no column, defaulting the column to 0-based 0', () => {
-        atom.config.set('terminal.behavior.localPathBehavior', 'dir-explorer-file-pulsar');
+        atom.config.set(`${PACKAGE_NAME}.behavior.localPathBehavior`, 'dir-explorer-file-pulsar');
         let filePath = path.join(tmpdir, 'some-file.txt');
         element.activateLocalPathLink({ ctrlKey: true }, filePath, false, 12);
         expect(atom.workspace.open).toHaveBeenCalledWith(filePath, {
@@ -679,7 +697,7 @@ describe('TerminalElement', () => {
       });
 
       it('reveals a file via the shell, under the "all-explorer" behavior', () => {
-        atom.config.set('terminal.behavior.localPathBehavior', 'all-explorer');
+        atom.config.set(`${PACKAGE_NAME}.behavior.localPathBehavior`, 'all-explorer');
         let filePath = path.join(tmpdir, 'some-file.txt');
         element.activateLocalPathLink({ ctrlKey: true }, filePath, false);
         expect(shell.showItemInFolder).toHaveBeenCalledWith(filePath);
@@ -688,8 +706,8 @@ describe('TerminalElement', () => {
     });
 
     it('does not require a modifier when disabled in settings', () => {
-      atom.config.set('terminal.behavior.requireModifierToOpenUrls', false);
-      atom.config.set('terminal.behavior.localPathBehavior', 'dir-explorer-file-pulsar');
+      atom.config.set(`${PACKAGE_NAME}.behavior.requireModifierToOpenUrls`, false);
+      atom.config.set(`${PACKAGE_NAME}.behavior.localPathBehavior`, 'dir-explorer-file-pulsar');
       element.activateLocalPathLink({ ctrlKey: false, metaKey: false }, tmpdir, true);
       expect(shell.openPath).toHaveBeenCalledWith(tmpdir);
     });

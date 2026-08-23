@@ -17,6 +17,8 @@
   # Insert the selected text into the active terminal.
   "ctrl-~ i": "terminal:insert-selected-text"
 
+# Targets TERMINAL_ELEMENT_ATTRIBUTE (src/element.ts) rather than the tag
+# name — see the comment there.
 ".platform-darwin [data-pulsar-terminal]":
   # Cmd-K clears the buffer in Terminal.app and iTerm. That's taken in the
   # default keymap for pane management tasks, so we can't supersede it. Instead

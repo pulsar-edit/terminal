@@ -36,8 +36,8 @@ import { getTheme } from './themes';
  * constructor — see the comment there), regardless of what its tag name
  * happens to be. See `getElementName()` in `utils.ts` for why that can vary.
  * Everything that needs to find a terminal element (styles, keymaps, the
- * context menu, command scoping, `.closest()` lookups) should target this
- * attribute instead of the tag name.
+ * context menu, command scoping, `.closest()` lookups, the e2e tests) should
+ * target this attribute instead of the tag name.
  *
  * This is needed at least temporarily so that an instance of this package can
  * be linked via `ppm` and shadow the builtin `terminal` package. It will no
@@ -319,6 +319,7 @@ export class TerminalElement extends HTMLElement {
   private subscriptions = new CompositeDisposable();
   private initializedPromise?: Promise<void>;
   private createdPromise?: Promise<void>;
+  private restartingPromise?: Promise<void>;
   private findPalette?: FindPalette;
 
   // The bundle of subscriptions that manages all the transient items of a
@@ -436,15 +437,18 @@ export class TerminalElement extends HTMLElement {
 
           if (last.intersectionRatio !== 1.0) return;
           this.#terminalInitiallyVisible = true;
+
+          // Disconnect _before_ awaiting `createTerminal() in order to shut
+          // down any possible race conditions.
+          this.#terminalIntersectionObserver?.disconnect();
+          this.#terminalIntersectionObserver = null;
+
           try {
             await this.createTerminal();
             initializeResolve();
           } catch (error) {
             initializeReject(error);
           }
-
-          this.#terminalIntersectionObserver?.disconnect();
-          this.#terminalIntersectionObserver = null;
         },
         {
           root: this,
@@ -625,6 +629,13 @@ export class TerminalElement extends HTMLElement {
     }));
 
     let originalTooltip = this.tooltip;
+    // `onRender` isn't a one-shot "first paint" hook — XTerm calls it again
+    // on every subsequent repaint of this decoration (scroll, resize, cursor
+    // blink, etc.), for as long as it stays registered. Without the
+    // `tooltipAdded` guard below, each of those repaints would call
+    // `atom.tooltips.add` again, stacking up duplicate tooltip instances on
+    // the same element for a single hover.
+    let tooltipAdded = false;
     decoration.onRender((elem) => {
       if (!this.terminal) return;
 
@@ -635,6 +646,9 @@ export class TerminalElement extends HTMLElement {
       // described above. If XTerm thinks this decoration should be hidden,
       // it's almost certainly wrong.
       elem.style.display = '';
+
+      if (tooltipAdded) return;
+      tooltipAdded = true;
 
       // All tooltip management is manual. We don't want to rely on a belief
       // that `element` is being hovered by the mouse pointer (that's not safe
@@ -1034,12 +1048,18 @@ export class TerminalElement extends HTMLElement {
     }
   }
 
+  /**
+   * Instantiates a new terminal.
+   *
+   * Async; if a terminal creation is already in flight, subsequent calls will
+   * return the promise tied to the existing terminal creation.
+   */
   async createTerminal () {
     if (this.createdPromise) {
-      await this.createdPromise;
+      return await this.createdPromise;
     }
     this.createdPromise = this.#createTerminal();
-    this.createdPromise.then(() => {
+    this.createdPromise.finally(() => {
       this.createdPromise = undefined;
     });
     return await this.createdPromise;
@@ -1348,7 +1368,24 @@ export class TerminalElement extends HTMLElement {
     this.showNotification(message, 'info', { restartButtonText: 'Start' });
   }
 
+  /**
+   * Starts or restarts the PTY.
+   *
+   * Async; if a process restart is already in flight, subsequent calls will
+   * return the promise tied to the existing restart.
+   */
   async restartPtyProcess () {
+    if (this.restartingPromise) {
+      return await this.restartingPromise;
+    }
+    this.restartingPromise = this.#restartPtyProcess();
+    this.restartingPromise.finally(() => {
+      this.restartingPromise = undefined;
+    });
+    return await this.restartingPromise;
+  }
+
+  async #restartPtyProcess () {
     if (this.#ptyMeta?.running) {
       this.pty?.removeAllListeners('exit');
       this.pty?.kill();
