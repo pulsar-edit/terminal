@@ -588,7 +588,7 @@ export class TerminalElement extends HTMLElement {
       return '\n\nThere are no special keybindings defined on this platform for clipboard management (since the default bindings do not clash with terminal bindings) but you may define your own in your `keymap.cson` by targeting the `pulsar-terminal` selector.';
     }
 
-    return `\n\nHere are the current clipboard-related keybindings for when the terminal has focus:\n\n${listItems.join('\n')}\n\nYou may rebind these keys in your \`keymap.cson\` if you prefer.`;
+    return `\n\nWhen the terminal has focus, you may use these keybindings instead:\n\n${listItems.join('\n')}\n\nYou may rebind these keys in your \`keymap.cson\` if you prefer.`;
   }
 
   keyBindingForCommand (command: string, ownBindingsOnly = false) {
