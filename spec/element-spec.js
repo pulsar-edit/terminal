@@ -548,7 +548,7 @@ describe('TerminalElement', () => {
         let [, options] = atom.notifications.addInfo.mostRecentCall.args;
         expect(options.description).not.toContain('  ');
         expect(options.description).toContain(
-          'selector. (This message will be shown only once.)'
+          'selector.\n\n**(This message will be shown only once.)**'
         );
       });
     });
