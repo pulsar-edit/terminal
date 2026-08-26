@@ -1,11 +1,11 @@
 import { ISearchDecorationOptions } from "@xterm/addon-search";
-import { Config } from "./config";
 import type { ITheme } from '@xterm/xterm';
 import { Color } from "atom";
+import { PACKAGE_NAME } from "./utils";
 
 export function getTheme (): ITheme {
-  let theme = Config.get('appearance.theme');
-  let customThemeColors: ITheme = Config.get('appearance.customThemeColors') ?? {};
+  let theme = atom.config.get(`${PACKAGE_NAME}.appearance.theme`);
+  let customThemeColors: ITheme = atom.config.get(`${PACKAGE_NAME}.appearance.customThemeColors`) ?? {};
 
   // Start with the custom colors as a base. Some of these hard-coded themes
   // will override the custom colors and others won't.
@@ -243,7 +243,7 @@ export function getTheme (): ITheme {
 // Retrieve color values that are related to the theme, but not part of the
 // `ITheme` object.
 export function getSearchTheme(): ISearchDecorationOptions {
-  let theme = Config.get('appearance.theme');
+  let theme = atom.config.get(`${PACKAGE_NAME}.appearance.theme`);
   let {
     matchBorder,
     activeMatchBorder,
@@ -252,7 +252,7 @@ export function getSearchTheme(): ISearchDecorationOptions {
 
     foreground,
     background
-  } = Config.get('appearance.customThemeColors') ?? {};
+  } = atom.config.get(`${PACKAGE_NAME}.appearance.customThemeColors`) ?? {};
 
   // Start with the custom colors as a base. Some of the options below will
   // override the custom colors and others won't.
