@@ -1,3 +1,4 @@
+import { KeyBinding } from 'atom';
 import { Signal, TerminalModel } from './model';
 import { ITerminalOptions, ITheme, Terminal as XTerminal } from '@xterm/xterm';
 import { Pty } from './pty';
@@ -12,6 +13,7 @@ export declare class TerminalElement extends HTMLElement {
     private initializedPromise?;
     private createdPromise?;
     private findPalette?;
+    private warnAboutClipboardKeybindings;
     private div?;
     static create(): TerminalElement;
     initialize(model: TerminalModel): Promise<void>;
@@ -31,6 +33,9 @@ export declare class TerminalElement extends HTMLElement {
     getXtermOptions(): ITerminalOptions;
     setMainBackgroundColor(theme?: ITheme): void;
     optionallyWarnAboutModifierlessClick(): void;
+    optionallyWarnAboutClipboardKeybindings(binding: KeyBinding): void;
+    buildKeybindingListForClipboardActions(): string;
+    keyBindingForCommand(command: string, ownBindingsOnly?: boolean): KeyBinding | null;
     createTerminal(): Promise<void>;
     waitForShellEnvironment(timeoutMs?: number): Promise<unknown>;
     updateTheme(): void;

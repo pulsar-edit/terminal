@@ -286,6 +286,13 @@ export declare function getConfigSchema(): {
                 default: boolean;
                 order: number;
             };
+            warnAboutClipboardKeybindings: {
+                title: string;
+                description: string;
+                type: string;
+                default: boolean;
+                order: number;
+            };
         };
     };
 };

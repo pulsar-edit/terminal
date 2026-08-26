@@ -376,6 +376,13 @@ export function getConfigSchema () {
           type: 'boolean',
           default: true,
           order: 3
+        },
+        warnAboutClipboardKeybindings: {
+          title: 'Warn About Clipboard Keybindings',
+          description: `When enabled, a user’s first time pressing \`Ctrl+C\` or \`Ctrl+V\` __when the terminal has focus__ will trigger a notification explaining why those keybindings do not trigger clipboard actions (because both have special meaning inside a terminal) and pointing to the alternative keybindings for \`core:copy\` and \`core:paste\`.\n\nThis notification shows only when this package detects an overlap between any keybindings claimed by the terminal and any keybindings that _would have_ matched \`core:copy\` or \`core:paste\` had they not been claimed by the terminal. (On macOS, native bindings for clipboard actions do not clash with terminal bindings, so macOS users won’t see this notification unless they redefine those bindings to something that _does_ clash.)\n\nThis option is automatically switched to \`false\` after the first display of this notification.`,
+          type: 'boolean',
+          default: true,
+          order: 4
         }
       },
     }
