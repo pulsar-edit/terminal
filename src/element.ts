@@ -751,8 +751,8 @@ export class TerminalElement extends HTMLElement {
 
   destroy () {
     this.pty?.kill();
-    this.#loseWebglContext();
     this.terminal?.dispose();
+    this.#loseWebglContext();
     this.subscriptions.dispose();
   }
 
