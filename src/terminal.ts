@@ -9,7 +9,7 @@ import {
   WorkspaceOpenOptions
 } from  'atom';
 import { Config, getConfigSchema, possiblySetAutoShell } from './config';
-import { TerminalElement } from './element';
+import { TerminalElement, registerTerminalElement, TERMINAL_ELEMENT_ATTRIBUTE } from './element';
 import { isSafeSignal, TerminalModel } from './model';
 import { BASE_URI, debounce, recalculateActive, generateUri } from './utils';
 import * as Logger from './log';
@@ -46,6 +46,8 @@ export default class Terminal {
     this.activated = true;
     this.subscriptions = new CompositeDisposable();
     this.terminals = new Set();
+
+    registerTerminalElement();
 
     Logger.initialize();
 
@@ -178,7 +180,7 @@ export default class Terminal {
         'terminal:focus-next': () => this.focusNext(),
         'terminal:focus-previous': () => this.focusPrevious()
       }),
-      atom.commands.add('pulsar-terminal', {
+      atom.commands.add(`[${TERMINAL_ELEMENT_ATTRIBUTE}]`, {
         'core:copy': (event) => {
           return this.copy(event);
         },
@@ -372,7 +374,7 @@ export default class Terminal {
 
   static inferTerminalElement (event: CommandEvent) {
     if (!event.target || !(event.target instanceof HTMLElement)) return null;
-    return event.target.closest<TerminalElement>('pulsar-terminal');
+    return event.target.closest<TerminalElement>(`[${TERMINAL_ELEMENT_ATTRIBUTE}]`);
   }
 
   static async open (uri: string, rawOptions: OpenOptions = {}): Promise<TerminalModel> {

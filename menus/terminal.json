@@ -1,6 +1,6 @@
 {
   "context-menu": {
-    "pulsar-terminal": [
+    "[data-pulsar-terminal]": [
       {
         "label": "Close",
         "command": "terminal:close"

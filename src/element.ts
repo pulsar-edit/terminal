@@ -18,6 +18,7 @@ import { IPtyForkOptions, IWindowsPtyForkOptions } from 'node-pty';
 
 import {
   debounce,
+  getElementName,
   isMac,
   isWindows,
   keystrokeToHTML,
@@ -28,6 +29,22 @@ import {
   windowsBuildNumber
 } from './utils';
 import { getTheme } from './themes';
+
+/**
+ * A stable marker the element sets on itself in `initialize()` (not the
+ * constructor — see the comment there), regardless of what its tag name
+ * happens to be. See `getElementName()` in `utils.ts` for why that can vary.
+ * Everything that needs to find a terminal element (styles, keymaps, the
+ * context menu, command scoping, `.closest()` lookups) should target this
+ * attribute instead of the tag name.
+ *
+ * This is needed at least temporarily so that an instance of this package can
+ * be linked via `ppm` and shadow the builtin `terminal` package. It will no
+ * longer be needed once Pulsar ships a version of `terminal` that does not
+ * unconditionally register the `pulsar-terminal` element name at `require`
+ * time.
+ */
+export const TERMINAL_ELEMENT_ATTRIBUTE = 'data-pulsar-terminal';
 
 // TODO: Right now we're using `@electron/remote` as an explicit dependency;
 // but when this becomes a builtin package, `@electron/remote` will be
@@ -114,10 +131,19 @@ export class TerminalElement extends HTMLElement {
   }> = {};
 
   static create () {
-    return document.createElement('pulsar-terminal') as TerminalElement;
+    return document.createElement(getElementName()) as TerminalElement;
   }
 
   async initialize (model: TerminalModel) {
+    // Not in the constructor: custom element constructors must not set
+    // attributes on themselves (or have any other side effects beyond
+    // `super()` and internal state setup) — Atom's `document-register-
+    // element` compat shim enforces this strictly and throws
+    // ("Failed to construct 'CustomElement': The result must not have
+    // attributes") if violated. See the comment on `TERMINAL_ELEMENT_ATTRIBUTE`
+    // above for what this is for.
+    this.setAttribute(TERMINAL_ELEMENT_ATTRIBUTE, '');
+
     this.model = model;
     this.model.setElement(this);
 
@@ -1109,4 +1135,18 @@ export class TerminalElement extends HTMLElement {
   }
 }
 
-customElements.define('pulsar-terminal', TerminalElement);
+// Deliberately not called at module-load time. This module gets `require`d
+// as part of Pulsar's package *preload* step for any bundled package (see
+// `Package.prototype.preload()` in Pulsar core), which happens unconditionally
+// for whichever copy of this package Pulsar ships bundled — independent of
+// whether a dev-linked copy is what actually ends up activated. Since
+// `customElements.define()` can never be called twice for the same tag name,
+// defining it eagerly here would let whichever copy happens to load first
+// (not necessarily the one that's actually activated) permanently win the
+// registration. Call this from the package's `activate()` instead, which
+// only ever runs for the package that's genuinely in use.
+export function registerTerminalElement () {
+  let name = getElementName();
+  if (customElements.get(name)) return;
+  customElements.define(name, TerminalElement);
+}
