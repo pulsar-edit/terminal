@@ -341,6 +341,7 @@ export class TerminalElement extends HTMLElement {
   #fitAddon?: FitAddon;
   #searchAddon?: SearchAddon;
   #shellIntegrationAddon?: ShellIntegrationAddon;
+  #webglAddon?: WebglAddon | null = null;
   #prioritizedPrefixes: string[] = [];
 
   // Metadata about the PTY.
@@ -744,7 +745,26 @@ export class TerminalElement extends HTMLElement {
   destroy () {
     this.pty?.kill();
     this.terminal?.dispose();
+    this.#loseWebglContext();
     this.subscriptions.dispose();
+  }
+
+  // TEMP: `WebglAddon.dispose()` detaches its canvas but never releases the
+  // underlying WebGL2 context, so it lingers until it is garbage collected.
+  // Chromium keeps only ~16 live contexts per document, so a session that
+  // opens and closes enough terminals will start force-evicting them — and the
+  // victim is the *oldest* context, which may belong to a terminal that is
+  // still on screen. That terminal goes blank.
+  //
+  // Losing the context explicitly is what xterm.js itself will do once
+  // https://github.com/xtermjs/xterm.js/pull/6069 lands; remove this then.
+  //
+  // Every step is optional-chained so that this degrades to the current
+  // leak-on-GC behavior rather than throwing if the addon's internals change.
+  #loseWebglContext () {
+    let gl = (this.#webglAddon as any)?._renderer?._gl as WebGL2RenderingContext | undefined;
+    gl?.getExtension('WEBGL_lose_context')?.loseContext();
+    this.#webglAddon = null;
   }
 
   getShellCommand () {
@@ -1130,15 +1150,15 @@ export class TerminalElement extends HTMLElement {
     }
 
     if (Config.get('xterm.webgl')) {
-      let webglAddon: WebglAddon | null = null;
       try {
-        webglAddon = new WebglAddon();
+        this.#webglAddon = new WebglAddon();
       } catch (err) {
         // The addon will throw on instantiation if a WebGL context cannot be
         // acquired.
         console.warn('terminal.xterm.webgl is true, but platform does not support WebGL');
       }
-      if (webglAddon) {
+      if (this.#webglAddon) {
+        let webglAddon = this.#webglAddon;
         webglAddon.onContextLoss(() => webglAddon.dispose());
         this.terminal.loadAddon(webglAddon);
       }

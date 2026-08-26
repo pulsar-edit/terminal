@@ -98,16 +98,9 @@ describe('TerminalElement', () => {
     await atom.updateProcessEnvAndTriggerHooks();
 
     atom.config.set(`${PACKAGE_NAME}.behavior.promptOnStartup`, false);
+    // Turn off WebGL except for the specs that explicitly test it.
+    atom.config.set(`${PACKAGE_NAME}.xterm.webgl`, false);
 
-
-    let ptyProcess = jasmine.createSpyObj('ptyProcess', [
-      'kill',
-      'write',
-      'resize',
-      'on',
-      'removeAllListeners'
-    ]);
-    ptyProcess.title = 'some-test-process';
     spyOn(Pty.prototype, 'spawn').andCallFake(() => {
       return createMockWorkerProcess();
     });
@@ -133,7 +126,6 @@ describe('TerminalElement', () => {
     await wait(0);
     while (createdElements.length) {
       let el = createdElements.shift();
-      console.log('Destroying element', el.uid, 'with PID:', el.pty?.id);
       el.destroy();
       if (el.parentNode) {
         el.parentNode.removeChild(el);

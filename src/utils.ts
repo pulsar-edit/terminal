@@ -1,7 +1,6 @@
 import * as os from 'os';
 import * as path from 'path';
 
-import { Config } from "./config";
 import { TerminalModel } from "./model";
 
 export function isWindows () {
@@ -97,7 +96,7 @@ export function withResolvers<T extends unknown = void>(): {
 }
 
 export function recalculateActive (terminals: Set<TerminalModel>, active?: TerminalModel) {
-  let allowHidden = Config.get('behavior.activeTerminalLogic') === 'all';
+  let allowHidden = atom.config.get(`${PACKAGE_NAME}.behavior.activeTerminalLogic`) === 'all';
   let terminalsList = Array.from(terminals);
   terminalsList.sort((a, b) => {
     if (active && a === active) return -1;
@@ -118,8 +117,8 @@ export function recalculateActive (terminals: Set<TerminalModel>, active?: Termi
 
 
 export function getCurrentCwd () {
-  let useProjectRootAsCwd = Config.get('terminal.useProjectRootAsCwd');
-  let fallbackCwd = Config.get('terminal.cwd');
+  let useProjectRootAsCwd = atom.config.get(`${PACKAGE_NAME}.terminal.useProjectRootAsCwd`);
+  let fallbackCwd = atom.config.get(`${PACKAGE_NAME}.terminal.cwd`);
   let [projectRoot] = atom.project.getPaths();
   if (!useProjectRootAsCwd) return fallbackCwd;
   return projectRoot ?? fallbackCwd;
