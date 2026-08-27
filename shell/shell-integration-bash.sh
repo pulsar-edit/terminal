@@ -101,11 +101,11 @@ fi
 # Prevent multiple activation with guard
 if [ -z "${PULSAR_TERMINAL_PYTHON_AUTOACTIVATE_GUARD:-}" ]; then
 	export PULSAR_TERMINAL_PYTHON_AUTOACTIVATE_GUARD=1
-	if [ -n "${PULSAR_TERMINAL_PYTHON_BASH_ACTIVATE:-}" ] && [ "$TERM_PROGRAM" = "vscode" ]; then
+	if [ -n "${PULSAR_TERMINAL_PYTHON_BASH_ACTIVATE:-}" ] && [ "$TERM_PROGRAM" = "pulsar" ]; then
 		# Prevent crashing by negating exit code
 		if ! builtin eval "$PULSAR_TERMINAL_PYTHON_BASH_ACTIVATE"; then
 			__pulsar_activation_status=$?
-			builtin printf '\x1b[0m\x1b[7m * \x1b[0;103m VS Code Python bash activation failed with exit code %d \x1b[0m' "$__pulsar_activation_status"
+			builtin printf '\x1b[0m\x1b[7m * \x1b[0;103m Pulsar Python bash activation failed with exit code %d \x1b[0m' "$__pulsar_activation_status"
 		fi
 	fi
 	# Remove any leftover Python activation env vars.

@@ -93,7 +93,7 @@ if not set -q PULSAR_TERMINAL_PYTHON_AUTOACTIVATE_GUARD
 		set __pulsar_activation_status $status
 
 		if test $__pulsar_activation_status -ne 0
-			builtin printf '\x1b[0m\x1b[7m * \x1b[0;103m VS Code Python fish activation failed with exit code %d \x1b[0m \n' "$__pulsar_activation_status"
+			builtin printf '\x1b[0m\x1b[7m * \x1b[0;103m Pulsar Python fish activation failed with exit code %d \x1b[0m \n' "$__pulsar_activation_status"
 		end
 	end
 	# Remove any leftover Python activation env vars.
