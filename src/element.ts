@@ -44,6 +44,9 @@ import { getTheme } from './themes';
  * unconditionally register the `pulsar-terminal` element name at `require`
  * time.
  */
+// NOTE: Keep this even after the custom element naming clash is solved. People
+// might depend on it and it's useful in certain tests that do not require an
+// actual terminal element.
 export const TERMINAL_ELEMENT_ATTRIBUTE = 'data-pulsar-terminal';
 
 // TODO: Right now we're using `@electron/remote` as an explicit dependency;
