@@ -4,6 +4,7 @@ import {
   Disposable,
   Dock,
   Pane,
+  PaneItem,
   TextEditorElement,
   WorkspaceCenter,
   WorkspaceOpenOptions
@@ -33,7 +34,10 @@ function isValidLocation(str: string): str is WorkspaceOpenLocation {
   return VALID_LOCATIONS.includes(str);
 }
 
+type FocusTarget = { type: 'item', item: PaneItem } | { type: 'element', element: HTMLElement };
+
 export default class Terminal {
+  static previousFocus: FocusTarget | null = null;
 
   static subscriptions: CompositeDisposable;
   static terminals: Set<TerminalModel>;
@@ -368,6 +372,30 @@ export default class Terminal {
     });
 
     this.subscriptions.add(...dockDisposables);
+
+    let workspaceElement = atom.views.getView(atom.workspace);
+    let onFocusIn = (event: FocusEvent) => {
+      let next = this.describeFocus(event.target);
+      if (next) this.previousFocus = next;
+    };
+
+    workspaceElement.addEventListener('focusin', onFocusIn);
+    this.subscriptions.add(new Disposable(() => {
+      workspaceElement.removeEventListener('focusin', onFocusIn);
+    }));
+  }
+
+  static describeFocus (target: EventTarget | null): FocusTarget | null {
+    if (!(target instanceof HTMLElement)) return null;
+    // We only care about it if it came from outside of a terminal.
+    if (target.closest(`[${TERMINAL_ELEMENT_ATTRIBUTE}]`)) return null;
+
+    for (let item of atom.workspace.getPaneItems()) {
+      if (atom.views.getView(item)?.contains(target)) {
+        return { type: 'item', item: item as PaneItem };
+      }
+    }
+    return { type: 'element', element: target }
   }
 
   static inferTerminalModel (event?: CommandEvent): TerminalModel | undefined {
@@ -819,6 +847,23 @@ export default class Terminal {
   }
 
   static unfocus () {
+    let target = this.previousFocus;
+    if (target?.type === 'item') {
+      let pane = atom.workspace.paneForItem(target.item);
+      if (pane) {
+        pane.activateItem(target.item);
+        pane.activate();
+        return;
+      }
+    }
+
+    if (target?.type === 'element' && target.element.isConnected) {
+      target.element.focus();
+      return;
+    }
+
+    // Fall back to focusing the workspace as a whole; this will at least make
+    // most keybindings work.
     atom.views.getView(atom.workspace).focus();
   }
 

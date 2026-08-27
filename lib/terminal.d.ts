@@ -1,16 +1,25 @@
-import { CommandEvent, CompositeDisposable, Dock, Pane, WorkspaceCenter, WorkspaceOpenOptions } from 'atom';
+import { CommandEvent, CompositeDisposable, Dock, Pane, PaneItem, WorkspaceCenter, WorkspaceOpenOptions } from 'atom';
 import { TerminalElement } from './element';
 import { TerminalModel } from './model';
 type OpenOptions = WorkspaceOpenOptions & {
     target?: HTMLElement | EventTarget | null;
     cwd?: string;
 };
+type FocusTarget = {
+    type: 'item';
+    item: PaneItem;
+} | {
+    type: 'element';
+    element: HTMLElement;
+};
 export default class Terminal {
+    static previousFocus: FocusTarget | null;
     static subscriptions: CompositeDisposable;
     static terminals: Set<TerminalModel>;
     static config: Record<string, unknown>;
     static activated: boolean;
     static activate(_state: unknown): void;
+    static describeFocus(target: EventTarget | null): FocusTarget | null;
     static inferTerminalModel(event?: CommandEvent): TerminalModel | undefined;
     static inferTerminalElement(event: CommandEvent): TerminalElement | null;
     static open(uri: string, rawOptions?: OpenOptions): Promise<TerminalModel>;

@@ -1,4 +1,5 @@
 const Terminal = require('../lib/terminal');
+const { TERMINAL_ELEMENT_ATTRIBUTE } = require('../lib/element');
 const { URL } = require('url');
 const { PACKAGE_NAME } = require('../lib/utils');
 
@@ -29,6 +30,158 @@ describe('Terminal', () => {
       Terminal.unfocus();
       expect(model.element.contains(document.activeElement)).toEqual(false);
       model.destroy();
+    });
+  });
+
+  describe('focus tracking', () => {
+    let workspaceElement;
+
+    beforeEach(async () => {
+      await activatePackage();
+      workspaceElement = atom.views.getView(atom.workspace);
+      jasmine.attachToDOM(workspaceElement);
+      Terminal.previousFocus = null;
+    });
+
+    afterEach(() => {
+      Terminal.previousFocus = null;
+    });
+
+    // Builds a stand-in for a terminal element. `describeFocus` only looks for
+    // the marker attribute, so this exercises the same branch as a real
+    // terminal without paying for a pty and an xterm boot.
+    function createFakeTerminal () {
+      let fake = document.createElement('div');
+      fake.setAttribute(TERMINAL_ELEMENT_ATTRIBUTE, '');
+      let inner = document.createElement('input');
+      fake.appendChild(inner);
+      workspaceElement.appendChild(fake);
+      return { fake, inner };
+    }
+
+    function createStrayElement () {
+      let stray = document.createElement('input');
+      workspaceElement.appendChild(stray);
+      return stray;
+    }
+
+    describe('describeFocus()', () => {
+      it('ignores targets that are not elements', () => {
+        expect(Terminal.describeFocus(null)).toBe(null);
+        expect(Terminal.describeFocus(window)).toBe(null);
+      });
+
+      it('ignores focus that originates inside a terminal', () => {
+        let { inner } = createFakeTerminal();
+        expect(Terminal.describeFocus(inner)).toBe(null);
+      });
+
+      it('describes focus inside a pane item as that item', async () => {
+        let editor = await atom.workspace.open();
+        let result = Terminal.describeFocus(atom.views.getView(editor));
+        expect(result.type).toBe('item');
+        expect(result.item).toBe(editor);
+      });
+
+      it('describes focus outside any pane item as a bare element', () => {
+        let stray = createStrayElement();
+        let result = Terminal.describeFocus(stray);
+        expect(result.type).toBe('element');
+        expect(result.element).toBe(stray);
+      });
+    });
+
+    describe('the focusin listener', () => {
+      it('records the last thing focused outside a terminal', async () => {
+        let editor = await atom.workspace.open();
+        atom.views.getView(editor).focus();
+        await wait(0);
+
+        expect(Terminal.previousFocus.type).toBe('item');
+        expect(Terminal.previousFocus.item).toBe(editor);
+      });
+
+      // The whole point of returning `null` from `describeFocus` for
+      // terminal-internal targets: xterm moves focus between its container and
+      // its helper textarea, and none of that should clobber the way back out.
+      it('does not overwrite the record when focus moves into a terminal', async () => {
+        let editor = await atom.workspace.open();
+        atom.views.getView(editor).focus();
+        await wait(0);
+
+        let { inner } = createFakeTerminal();
+        inner.focus();
+        await wait(0);
+
+        expect(Terminal.previousFocus.item).toBe(editor);
+      });
+    });
+
+    describe('unfocus()', () => {
+      it('restores focus to the previously focused pane item', async () => {
+        let editor = await atom.workspace.open();
+        let pane = atom.workspace.paneForItem(editor);
+        spyOn(pane, 'activateItem').andCallThrough();
+        spyOn(pane, 'activate').andCallThrough();
+        Terminal.previousFocus = { type: 'item', item: editor };
+
+        Terminal.unfocus();
+
+        expect(pane.activateItem).toHaveBeenCalledWith(editor);
+        expect(pane.activate).toHaveBeenCalled();
+      });
+
+      it('focuses a recorded element that is still in the document', () => {
+        let stray = createStrayElement();
+        Terminal.previousFocus = { type: 'element', element: stray };
+        spyOn(workspaceElement, 'focus');
+
+        Terminal.unfocus();
+
+        expect(document.activeElement).toBe(stray);
+        expect(workspaceElement.focus).not.toHaveBeenCalled();
+      });
+
+      it('falls back to the workspace when nothing has been recorded', () => {
+        Terminal.previousFocus = null;
+        spyOn(workspaceElement, 'focus');
+
+        Terminal.unfocus();
+
+        expect(workspaceElement.focus).toHaveBeenCalled();
+      });
+
+      it('falls back to the workspace when the recorded element has been detached', () => {
+        let stray = createStrayElement();
+        Terminal.previousFocus = { type: 'element', element: stray };
+        stray.remove();
+        spyOn(workspaceElement, 'focus');
+
+        Terminal.unfocus();
+
+        expect(workspaceElement.focus).toHaveBeenCalled();
+      });
+
+      it('falls back to the workspace when the recorded item has been destroyed', async () => {
+        let editor = await atom.workspace.open();
+        Terminal.previousFocus = { type: 'item', item: editor };
+        editor.destroy();
+        spyOn(workspaceElement, 'focus');
+
+        Terminal.unfocus();
+
+        expect(workspaceElement.focus).toHaveBeenCalled();
+      });
+
+      it('does not also focus the workspace after restoring a pane item', async () => {
+        let editor = await atom.workspace.open();
+        Terminal.previousFocus = { type: 'item', item: editor };
+        spyOn(workspaceElement, 'focus');
+
+        Terminal.unfocus();
+
+        expect(workspaceElement.focus).not.toHaveBeenCalled();
+      });
     });
   });
 
