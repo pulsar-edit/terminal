@@ -45,6 +45,9 @@ import { getTheme } from './themes';
  * unconditionally register the `pulsar-terminal` element name at `require`
  * time.
  */
+// NOTE: Keep this even after the custom element naming clash is solved. People
+// might depend on it and it's useful in certain tests that do not require an
+// actual terminal element.
 export const TERMINAL_ELEMENT_ATTRIBUTE = 'data-pulsar-terminal';
 
 // TODO: Right now we're using `@electron/remote` as an explicit dependency;
@@ -301,6 +304,65 @@ class TerminalLinkHandler implements ILinkHandler {
   }
 }
 
+/**
+ * A list of environment variables that should _always_ be stripped when
+ * starting a terminal session. Any borderline cases can just be part of the
+ * default `deleteEnv` setting… but these are pretty clearly wrong to inherit
+ * in all cases.
+ */
+const ENV_DENY_LIST: string[] = [
+  // Metadata defined by a particular terminal.
+  'TERM_PROGRAM',
+  'TERM_PROGRAM_VERSION',
+  'TERM_SESSION_ID',
+  'ITERM_SESSION_ID',
+  'ITERM_PROFILE',
+  'LC_TERMINAL',
+  'LC_TERMINAL_VERSION',
+  'WT_SESSION',
+  'WT_PROFILE_ID',
+  'VTE_VERSION',
+  'KONSOLE_VERSION',
+  'KONSOLE_DBUS_SESSION',
+  'KITTY_WINDOW_ID',
+  'KITTY_LISTEN_ON',
+  'KITTY_PID',
+  'WEZTERM_PANE',
+  'WEZTERM_UNIX_SOCKET',
+  'WEZTERM_EXECUTABLE',
+  'ALACRITTY_WINDOW_ID',
+  'ALACRITTY_SOCKET',
+  'ALACRITTY_LOG',
+  'GHOSTTY_RESOURCES_DIR',
+  'GHOSTTY_BIN_DIR',
+  // Multiplexing stuff.
+  'TMUX',
+  'TMUX_PANE',
+  'STY',
+  'SSH_TTY',
+  // Possibly present when launching Pulsar from a GUI.
+  'ORIGINAL_XDG_CURRENT_DESKTOP',
+  'CHROME_DESKTOP',
+  'GIO_LAUNCHED_DESKTOP_FILE',
+  'GIO_LAUNCHED_DESKTOP_FILE_PID',
+  // Things that would really, really confuse Pulsar if they got propagated.
+  'ELECTRON_RUN_AS_NODE',
+  'ELECTRON_NO_ATTACH_CONSOLE',
+  // Always present when Pulsar is launched from an AppImage; could confuse
+  // scripts that use its existence to check if they're being run from within
+  // an AppImage.
+  'APPIMAGE'
+];
+
+/**
+ * Some environment variables are too borderline to remove in all cases, but
+ * should be removed if another variable is present.
+ */
+const CONTINGENT_ENV_DENY_LIST: Record<string, string[]> = {
+  // When `APPIMAGE` is present, these are safe to delete because their values
+  // are specific to the AppImage environment.
+  'APPIMAGE': ['LD_LIBRARY_PATH', 'ARGV0', 'OWD', 'APPDIR']
+};
 
 export class TerminalElement extends HTMLElement {
   public model?: TerminalModel;
@@ -932,15 +994,40 @@ export class TerminalElement extends HTMLElement {
 
     // First copy over the fallbacks…
     Object.assign(env, fallbackEnv);
-    // …then whatever we inherited from `process.env`…
+    // …then whatever we inherited from `process.env`.
     Object.assign(env, { ...process.env });
-    // …then whatever we're overriding.
+
+    // Check the "contingent" deny-list — keys that are deleted only when
+    // another variable is present. Keys in this list are not necessarily
+    // deleted themselves; but for those that _are_ deleted, we want to check
+    // for their presence before we remove them.
+    for (let [key, contingentKeys] of Object.entries(CONTINGENT_ENV_DENY_LIST)) {
+      if (!(key in env)) continue;
+      for (let contingentKey of contingentKeys) {
+        delete env[contingentKey];
+      }
+    }
+
+    // Proceed with the compulsory deny-list.
+    for (let key of ENV_DENY_LIST) {
+      delete env[key];
+    }
+
+    // This is a capability we want to declare about ourselves, and it should
+    // absolutely overwrite an inherited variable. But we declare it before
+    // the overrides so that a user could nonetheless change it to another
+    // value in order to (e.g.) work around a bug in some other program.
+    env['COLORTERM'] = 'truecolor';
+
+    // Then copy overrides. (This allows something from the compulsory
+    // deny-list to still be overridden.)
     Object.assign(env, overrideEnv);
 
     // Then delete any that shouldn't be there.
     for (let key of deleteEnv) {
       delete env[key];
     }
+
     return env;
   }
 

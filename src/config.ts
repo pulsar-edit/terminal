@@ -126,7 +126,7 @@ export function getConfigSchema () {
               title: 'Deleted',
               description: `Names of environment variables that should be deleted from a terminal environment whenever present on startup. (Separate multiple entries with commas.)`,
               type: 'array',
-              default: ['NODE_ENV'],
+              default: ['NODE_ENV', 'NODE_OPTIONS', 'WINDOW'],
               order: 8
             }
           }
