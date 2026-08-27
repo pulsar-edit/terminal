@@ -230,6 +230,165 @@ describe('TerminalElement', () => {
     });
   });
 
+  describe('getEnv()', () => {
+    let savedEnv;
+
+    beforeEach(() => {
+      savedEnv = { ...process.env };
+      atom.config.set('terminal.terminal.env.fallbackEnv', '{}');
+      atom.config.set('terminal.terminal.env.overrideEnv', '{}');
+      atom.config.set('terminal.terminal.env.deleteEnv', []);
+    });
+
+    afterEach(() => {
+      for (let key of Object.keys(process.env)) {
+        delete process.env[key];
+      }
+      Object.assign(process.env, savedEnv);
+    });
+
+    // Deliberately does not use `TERM_PROGRAM`/`TERM_PROGRAM_VERSION`: those
+    // are stripped and then re-declared as our own, so they can't show that
+    // stripping happened. See the `TERM_PROGRAM` spec below.
+    it('strips variables on the compulsory deny-list', () => {
+      process.env.ITERM_SESSION_ID = 'w0t0p0:1234';
+      process.env.TMUX = '/tmp/tmux-501/default,1,0';
+      process.env.SSH_TTY = '/dev/ttys004';
+
+      let env = element.getEnv();
+
+      expect(env.ITERM_SESSION_ID).toBeUndefined();
+      expect(env.TMUX).toBeUndefined();
+      expect(env.SSH_TTY).toBeUndefined();
+    });
+
+    it('declares TERM_PROGRAM as its own, overwriting whatever was inherited', () => {
+      process.env.TERM_PROGRAM = 'iTerm.app';
+      process.env.TERM_PROGRAM_VERSION = '3.5.0';
+
+      let env = element.getEnv();
+
+      expect(env.TERM_PROGRAM).toBe('pulsar');
+      expect(env.TERM_PROGRAM_VERSION).toBe(atom.getVersion());
+    });
+
+    // The canary for an over-broad deny-list: strip too much and you get a
+    // terminal that can't find `ls`, which no other spec would notice.
+    it('leaves ordinary inherited variables alone', () => {
+      process.env.PATH = '/usr/bin:/bin';
+      process.env.HOME = '/Users/nobody';
+      process.env.LANG = 'en_US.UTF-8';
+      process.env.SSH_AUTH_SOCK = '/private/tmp/agent.sock';
+
+      let env = element.getEnv();
+
+      expect(env.PATH).toBe('/usr/bin:/bin');
+      expect(env.HOME).toBe('/Users/nobody');
+      expect(env.LANG).toBe('en_US.UTF-8');
+      expect(env.SSH_AUTH_SOCK).toBe('/private/tmp/agent.sock');
+    });
+
+    it('lets overrideEnv reinstate a variable from the compulsory deny-list', () => {
+      process.env.TMUX = '/tmp/tmux-501/default,1,0';
+      atom.config.set(
+        'terminal.terminal.env.overrideEnv',
+        JSON.stringify({ TMUX: '/tmp/tmux-501/default,9,9' })
+      );
+
+      expect(element.getEnv().TMUX).toBe('/tmp/tmux-501/default,9,9');
+    });
+
+    // The declaration sits before the overrides, so posing as another terminal
+    // remains possible for anyone who needs it.
+    it('lets overrideEnv change the declared TERM_PROGRAM', () => {
+      atom.config.set(
+        'terminal.terminal.env.overrideEnv',
+        JSON.stringify({ TERM_PROGRAM: 'iTerm.app' })
+      );
+
+      expect(element.getEnv().TERM_PROGRAM).toBe('iTerm.app');
+    });
+
+    // Pins the ordering: `deleteEnv` runs last, so it beats `overrideEnv`,
+    // whereas the compulsory list runs first and loses to it.
+    it('does not let overrideEnv reinstate a variable from deleteEnv', () => {
+      process.env.SOME_VARIABLE = 'inherited';
+      atom.config.set('terminal.terminal.env.deleteEnv', ['SOME_VARIABLE']);
+      atom.config.set(
+        'terminal.terminal.env.overrideEnv',
+        JSON.stringify({ SOME_VARIABLE: 'overridden' })
+      );
+
+      expect(element.getEnv().SOME_VARIABLE).toBeUndefined();
+    });
+
+    it('keeps contingent variables when APPIMAGE is absent', () => {
+      delete process.env.APPIMAGE;
+      process.env.LD_LIBRARY_PATH = '/opt/lib';
+      process.env.ARGV0 = 'zsh';
+      process.env.OWD = '/home/nobody';
+
+      let env = element.getEnv();
+
+      expect(env.LD_LIBRARY_PATH).toBe('/opt/lib');
+      expect(env.ARGV0).toBe('zsh');
+      expect(env.OWD).toBe('/home/nobody');
+    });
+
+    it('strips contingent variables — and the trigger — when APPIMAGE is present', () => {
+      process.env.APPIMAGE = '/opt/Pulsar.AppImage';
+      process.env.APPDIR = '/tmp/.mount_pulsar';
+      process.env.LD_LIBRARY_PATH = '/tmp/.mount_pulsar/usr/lib';
+      process.env.ARGV0 = 'zsh';
+      process.env.OWD = '/home/nobody';
+
+      let env = element.getEnv();
+
+      expect(env.APPIMAGE).toBeUndefined();
+      expect(env.APPDIR).toBeUndefined();
+      expect(env.LD_LIBRARY_PATH).toBeUndefined();
+      expect(env.ARGV0).toBeUndefined();
+      expect(env.OWD).toBeUndefined();
+    });
+
+    // `APPIMAGE=` is unlikely, but `LD_LIBRARY_PATH=` is a real idiom, so the
+    // trigger is tested for presence rather than truthiness.
+    it('treats an empty APPIMAGE as present', () => {
+      process.env.APPIMAGE = '';
+      process.env.LD_LIBRARY_PATH = '/tmp/.mount_pulsar/usr/lib';
+
+      expect(element.getEnv().LD_LIBRARY_PATH).toBeUndefined();
+    });
+
+    it('uses fallbackEnv only for variables that were not inherited', () => {
+      process.env.EXISTING_VARIABLE = 'inherited';
+      delete process.env.MISSING_VARIABLE;
+      atom.config.set(
+        'terminal.terminal.env.fallbackEnv',
+        JSON.stringify({
+          EXISTING_VARIABLE: 'fallback',
+          MISSING_VARIABLE: 'fallback'
+        })
+      );
+
+      let env = element.getEnv();
+
+      expect(env.EXISTING_VARIABLE).toBe('inherited');
+      expect(env.MISSING_VARIABLE).toBe('fallback');
+    });
+
+    it('declares COLORTERM, but lets the user override it', () => {
+      process.env.COLORTERM = '';
+      expect(element.getEnv().COLORTERM).toBe('truecolor');
+
+      atom.config.set(
+        'terminal.terminal.env.overrideEnv',
+        JSON.stringify({ COLORTERM: '256' })
+      );
+      expect(element.getEnv().COLORTERM).toBe('256');
+    });
+  });
+
   describe('getExtraXTermOptions()', () => {
     it('passes along values defined in the package config', () => {
       atom.config.set('terminal.xterm.additionalOptions', `{ "foo": false }`);
