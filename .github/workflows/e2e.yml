@@ -11,15 +11,14 @@ name: "E2E (shell integration)"
 # dimension is deliberately factored out now so that growing it is just
 # adding entries to `strategy.matrix.shell` below, not duplicating job
 # definitions.
+#
+# The spec suite lives in its own workflow (`specs.yml`); it used to run as a
+# step here, once per shell, which was three redundant runs per pull request.
 on:
-  schedule:
-    - cron: '17 6 * * *'
+  push:
+    branches:
+      - main
   pull_request:
-    paths:
-      - 'shell/**'
-      - 'src/shell-integration/**'
-      - 'e2e/**'
-      - '.github/workflows/e2e.yml'
   workflow_dispatch: {}
 
 jobs:
@@ -34,16 +33,19 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4.4.0
+      - name: Set up the package
+        uses: ./.github/actions/setup
+
+      # Keyed on the lockfile because that's what pins the Playwright version,
+      # and browser builds are tied to it. `playwright install` still runs
+      # below on a cache hit — it's a no-op for the browsers themselves, but
+      # `--with-deps` also installs system libraries via apt, which isn't
+      # something the cache covers.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
         with:
-          node-version: 'lts/*'
-
-      - name: Install dependencies
-        run: npm install --verbose
-
-      - name: Build
-        run: npm run build
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
@@ -91,34 +93,6 @@ jobs:
       # there) picks this up with no further wiring.
       - name: Resolve ${{ matrix.shell }}'s path
         run: echo "SHELL=$(which ${{ matrix.shell }})" >> "$GITHUB_ENV"
-
-      - name: Install Pulsar
-        uses: pulsar-edit/action-pulsar-dependency@v3.4
-
-      # Deliberately `rebuild`, not `install`.
-      #
-      # `install` re-resolves dependencies from package.json using `ppm`'s own
-      # bundled (very old) `npm`, which chokes on this package.json's `npm:`
-      # alias for `node-pty` and looks for a package literally named `node-pty`
-      # at that version instead.
-      #
-      # `rebuild` instead just recompiles whatever's already sitting in
-      # `node_modules` (populated correctly above by a modern `npm`) against
-      # Pulsar's bundled Electron ABI — which is the only thing this step
-      # actually needs to do, since dependency resolution already happened.
-      - name: Rebuild native dependencies against the installed Pulsar
-        run: pulsar --package rebuild --verbose
-
-      # Runs before the E2E suite deliberately. If something's broken here,
-      # there's no reason to pay for the slower, more flake-prone E2E steps
-      # below.
-      #
-      # `pulsar --test` still launches a real (if automated) Electron window,
-      # so it needs a display server the same way the E2E run does.
-      - name: Run specs
-        uses: coactions/setup-xvfb@v1.0.1
-        with:
-          run: pulsar --test spec/
 
       # `action-pulsar-dependency` installs Pulsar system-wide via `.deb` on
       # Linux. This resolves the real Electron executable underneath the

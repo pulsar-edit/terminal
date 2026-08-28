@@ -1,0 +1,49 @@
+name: "Set up the package"
+description: >
+  Installs Node and this package's dependencies, builds `lib/`, installs
+  Pulsar, and rebuilds native dependencies against Pulsar's Electron ABI.
+  Everything both the spec suite and the E2E suite need, and nothing either
+  one needs on its own.
+
+  Assumes the repo has already been checked out.
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node
+      uses: actions/setup-node@v4.4.0
+      with:
+        node-version: 'lts/*'
+        # Caches `~/.npm` (not `node_modules`) keyed on `package-lock.json`, so
+        # a lockfile-unchanged run skips re-downloading tarballs but still does
+        # a real install. Deliberately not caching `node_modules` itself: it
+        # holds native code built against a specific Electron ABI by the
+        # rebuild step below, and a stale cache there fails in confusing ways
+        # rather than obviously.
+        cache: npm
+
+    - name: Install dependencies
+      shell: bash
+      run: npm install --verbose
+
+    - name: Build
+      shell: bash
+      run: npm run build
+
+    - name: Install Pulsar
+      uses: pulsar-edit/action-pulsar-dependency@v3.4
+
+    # Deliberately `rebuild`, not `install`.
+    #
+    # `install` re-resolves dependencies from package.json using `ppm`'s own
+    # bundled (very old) `npm`, which chokes on this package.json's `npm:`
+    # alias for `node-pty` and looks for a package literally named `node-pty`
+    # at that version instead.
+    #
+    # `rebuild` instead just recompiles whatever's already sitting in
+    # `node_modules` (populated correctly above by a modern `npm`) against
+    # Pulsar's bundled Electron ABI — which is the only thing this step
+    # actually needs to do, since dependency resolution already happened.
+    - name: Rebuild native dependencies against the installed Pulsar
+      shell: bash
+      run: pulsar --package rebuild --verbose

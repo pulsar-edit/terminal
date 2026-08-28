@@ -1,0 +1,26 @@
+name: "Specs"
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch: {}
+
+jobs:
+  specs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up the package
+        uses: ./.github/actions/setup
+
+      # `pulsar --test` launches a real (if automated) Electron window, so it
+      # needs a display server even though nothing here is visibly rendered.
+      - name: Run specs
+        uses: coactions/setup-xvfb@v1.0.1
+        with:
+          run: pulsar --test spec/
