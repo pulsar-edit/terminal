@@ -494,6 +494,15 @@ export class TerminalElement extends HTMLElement {
       });
       this.#mainResizeObserver.observe(this.div.main);
 
+      // We wait for full visibility (not just `isIntersecting`) because
+      // `terminal.open()` measures character size off the live DOM.
+      //
+      // This costs ~935ms per element in CI: callbacks arrive on Chromium's
+      // rendering lifecycle, and `pulsar --test` never maps its window, so on
+      // Linux there's no frame sink and Chromium falls back to a ~1Hz timer.
+      // macOS is unaffected. No Xvfb or Chromium switch changes it; the fix
+      // would be to check visibility synchronously and keep the observer only
+      // for elements that aren't visible yet.
       this.#terminalIntersectionObserver = new IntersectionObserver(
         async (entries) => {
           let last = entries[entries.length - 1];

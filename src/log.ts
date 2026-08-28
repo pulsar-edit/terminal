@@ -4,6 +4,15 @@ import { Disposable } from 'atom';
 
 const TAG = `[terminal] `;
 
+// In headless mode, point `warn` and `debug` to `console.log` so they'll show
+// up in terminal output.
+let _headless = undefined;
+function isHeadless () {
+  // @ts-ignore Undocumented setting.
+  _headless ??= !!atom.getLoadSettings().headless;
+  return _headless;
+}
+
 let enabled = false;
 let subscription: Disposable | undefined = undefined;
 
@@ -30,13 +39,21 @@ export function log (...args: unknown[]) {
 export function warn (...args: unknown[]) {
   if (!enabled) return;
   args.unshift(TAG);
-  console.warn(...args);
+  if (isHeadless()) {
+    console.log(...args);
+  } else {
+    console.warn(...args);
+  }
 }
 
 export function debug (...args: unknown[]) {
   if (!enabled) return;
   args.unshift(TAG);
-  console.debug(...args);
+  if (isHeadless()) {
+    console.log(...args);
+  } else {
+    console.debug(...args);
+  }
 }
 
 export function error (...args: unknown[]) {
