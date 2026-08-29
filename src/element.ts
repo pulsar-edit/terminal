@@ -1,11 +1,12 @@
 import fs from 'fs-extra';
+import { fileURLToPath } from 'url';
 
 import { CompositeDisposable, Disposable, KeyBinding } from 'atom';
 import { isSafeSignal, Signal, TerminalModel } from './model';
 import { Config } from './config';
 import * as Logger from './log';
 
-import { ITerminalOptions, ITheme, Terminal as XTerminal } from '@xterm/xterm';
+import { IBufferCellPosition, IBufferRange, ILinkHandler, ITerminalOptions, ITheme, IViewportRange, Terminal as XTerminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { WebglAddon } from '@xterm/addon-webgl';
@@ -35,8 +36,8 @@ import { getTheme } from './themes';
  * constructor — see the comment there), regardless of what its tag name
  * happens to be. See `getElementName()` in `utils.ts` for why that can vary.
  * Everything that needs to find a terminal element (styles, keymaps, the
- * context menu, command scoping, `.closest()` lookups) should target this
- * attribute instead of the tag name.
+ * context menu, command scoping, `.closest()` lookups, the e2e tests) should
+ * target this attribute instead of the tag name.
  *
  * This is needed at least temporarily so that an instance of this package can
  * be linked via `ppm` and shadow the builtin `terminal` package. It will no
@@ -54,26 +55,33 @@ export const TERMINAL_ELEMENT_ATTRIBUTE = 'data-pulsar-terminal';
 // ambiently available. Better to use that without declaring it so as to avoid
 // version clashes.
 import { shell } from '@electron/remote';
+import { getShellIntegrationInjection } from './shell-integration';
+import { ShellIntegrationAddon } from './shell-integration/addon';
+import { LocalPathLinkProvider } from './link-detection/provider';
 
-// Given a line height and a font size, attempts to adjust the line height so
-// that it results in a pixel height that snaps to the nearest pixel (or
-// sub-pixel, taking device pixel ratio into account).
-//
-// In theory, this would be needed for synchronization with Pulsar, since the
-// editor code does something similar. In practice, though, line height values
-// seem to be applied differently in XTerm; a shared line-height value between
-// the editor and the terminal window results in much taller lines in the
-// terminal.
+/**
+ * Given a line height and a font size, attempts to adjust the line height so
+ * that it results in a pixel height that snaps to the nearest pixel (or
+ * sub-pixel, taking device pixel ratio into account).
+ *
+ * In theory, this would be needed for synchronization with Pulsar, since the
+ * editor code does something similar. In practice, though, line height values
+ * seem to be applied differently in XTerm; a shared line-height value between
+ * the editor and the terminal window results in much taller lines in the
+ * terminal.
+ */
 function clampLineHeight (lineHeight: number, fontSize: number) {
   let lineHeightInPx = fontSize * lineHeight;
   let roundedScaledLineHeightInPx = Math.round(lineHeightInPx * window.devicePixelRatio);
   return roundedScaledLineHeightInPx / (fontSize * window.devicePixelRatio);
 }
 
-// Takes a DOM `KeyboardEvent` whose default was already prevented and creates
-// a fresh event so we can re-propagate it upward. This allows certain key
-// bindings and key sequences to keep working even if some of their events are
-// swallowed by xterm.js.
+/**
+ * Takes a DOM `KeyboardEvent` whose default was already prevented and creates
+ * a fresh event so we can re-propagate it upward. This allows certain key
+ * bindings and key sequences to keep working even if some of their events are
+ * swallowed by xterm.js.
+ */
 function redispatchKeyboardEvent(originalEvent: KeyboardEvent, targetElement: EventTarget) {
   let newEvent = new KeyboardEvent(originalEvent.type, {
     bubbles: true,
@@ -90,6 +98,217 @@ function redispatchKeyboardEvent(originalEvent: KeyboardEvent, targetElement: Ev
   });
 
   targetElement.dispatchEvent(newEvent);
+}
+
+interface TerminalLinkHandlerOptions {
+  activate(event: MouseEvent, text: string, range?: IBufferRange): unknown;
+  hover(event: MouseEvent, text: string, range?: IBufferRange | IViewportRange, rangeType?: 'buffer' | 'viewport'): unknown;
+  leave(event: MouseEvent, text: string, range?: IBufferRange): unknown;
+}
+
+interface DelayedPresenceOptions<T> {
+  /**
+   * How long to wait in `pending-show` before transitioning to the `shown`
+   * state.
+   */
+  showDelay?: number;
+  /**
+   * How long to wait in `pending-hide` before transitioning back to the `idle`
+   * state.
+   */
+  hideDelay?: number;
+  /**
+   * Delay to use instead of `showDelay` when we're warm; defaults to `0`
+   * (instant).
+   */
+  fastShowDelay?: number;
+  /**
+   * How recently we must have hidden something to count as "warm" and skip the
+   * show delay; defaults to `showDelay`.
+   */
+  intentWindow?: number;
+  /**
+   * Function for detecting whether two keys are equal. Optional; will fall
+   * back to equality check via `===`.
+   */
+  isSameKey?: (a: T, b: T) => boolean;
+
+  /** What to execute as we transition from `pending-shown` to `shown`. */
+  onShow: (key: T) => void;
+
+  /** What to execute as we transition from `pending-hide` to `idle`. */
+  onHide: (key: T) => void;
+};
+
+type DelayedPresenceState = 'idle' | 'pending-show' | 'shown' | 'pending-hide';
+
+/**
+ * A state machine that uses delays between state changes to guard against
+ * rapid state fluctuation.
+ *
+ * Methods accept a key that scopes the state machine; this helps us know when
+ * to reset the state machine and when to ignore stale requests to transition.
+ *
+ * We use this as a way of manually managing show/hide delays on tooltips.
+ */
+class DelayedPresence<T> {
+  private state: DelayedPresenceState = 'idle';
+  private currentKey?: T;
+  private timer?: ReturnType<typeof setTimeout>;
+  private lastHideAt?: number;
+
+  private options: DelayedPresenceOptions<T>;
+
+  constructor(options: DelayedPresenceOptions<T>) {
+    this.options = options;
+  }
+
+  enter (key: T) {
+    if (this.#inState('shown', 'pending-hide') && this.#isSame(key)) {
+      // Same target re-entered before the hide timer fired; cancel it and stay
+      // shown. This filters out spurious mouseout events.
+      this.#cancelTimer();
+      this.state = 'shown';
+      return;
+    }
+
+    if (!this.#inState('idle')) {
+      // Different target, or else same target still pending its first show.
+      // Tear down whatever is in flight and start over.
+      this.#reset();
+    }
+
+    this.currentKey = key;
+    this.state = 'pending-show';
+
+    let delay = this.#effectiveShowDelay();
+
+    if (delay <= 0) {
+      this.state = 'shown';
+      this.options.onShow(key);
+      return;
+    }
+
+    this.timer = setTimeout(() => {
+      this.state = 'shown';
+      this.options.onShow(key);
+    }, this.options.showDelay ?? 0);
+  }
+
+  leave (key: T) {
+    if (!this.#isSame(key)) {
+      // A stale leave for a target we've already left.
+      return;
+    }
+
+    this.#cancelTimer();
+
+    if (this.#inState('pending-show')) {
+      this.state = 'idle';
+      this.currentKey = undefined;
+      return;
+    }
+
+    if (this.#inState('shown')) {
+      this.state = 'pending-hide';
+      this.timer = setTimeout(() => {
+        this.state = 'idle';
+        this.lastHideAt = Date.now();
+        this.options.onHide(key);
+        this.currentKey = undefined;
+      }, this.options.hideDelay ?? 0);
+    }
+  }
+
+  dispose () {
+    this.#reset();
+  }
+
+  // Like `dispose`, but only resets when the key matches.
+  dismiss (key?: T) {
+    if (key !== undefined && !this.#isSame(key)) return;
+    this.#reset();
+  }
+
+  #inState (...states: DelayedPresenceState[]) {
+    if (states.length === 1) {
+      return this.state === states[0];
+    }
+    return states.some(s => this.state === s);
+  }
+
+  #isSame (key: T) {
+    if (this.currentKey === undefined) return false;
+    return this.options.isSameKey?.(key, this.currentKey) ?? key === this.currentKey;
+  }
+
+  #reset () {
+    this.#cancelTimer();
+    if (this.#inState('shown', 'pending-hide') && this.currentKey !== undefined) {
+      this.lastHideAt = Date.now();
+      this.options.onHide(this.currentKey);
+    }
+    this.state = 'idle';
+    this.currentKey = undefined;
+  }
+
+  #effectiveShowDelay () {
+    let showDelay = this.options.showDelay ?? 0;
+    if (this.lastHideAt === undefined) return showDelay;
+
+    let intentWindow = this.options.intentWindow ?? showDelay;
+    let isWarm = (Date.now() - this.lastHideAt) < intentWindow;
+    return isWarm ? (this.options.fastShowDelay ?? 0) : showDelay;
+  }
+
+  #cancelTimer () {
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = undefined;
+  }
+}
+
+type TooltipMetadata = {
+  range: IBufferRange,
+  rangeType?: 'buffer' | 'viewport'
+  uri: string,
+};
+
+/**
+ * A link handler class designed to fulfill both the interfaces related to link
+ * handling (even though they differ from one another very slightly).
+ */
+class TerminalLinkHandler implements ILinkHandler {
+  allowNonHttpProtocols = true;
+
+  options: TerminalLinkHandlerOptions;
+
+  constructor (options: TerminalLinkHandlerOptions) {
+    this.options = options;
+  }
+
+  activate(event: MouseEvent, text: string, range: IBufferRange): void {
+    this.activateWithOptionalRange(event, text, range);
+  }
+
+  hover(event: MouseEvent, text: string, range: IBufferRange): void {
+    this.hoverWithOptionalRange(event, text, range, 'buffer');
+  }
+
+  leave(event: MouseEvent, text: string, range: IBufferRange): void {
+    this.leaveWithOptionalRange(event, text, range);
+  }
+
+  activateWithOptionalRange (event: MouseEvent, text: string, range?: IBufferRange) {
+    return this.options.activate(event, text, range);
+  }
+
+  hoverWithOptionalRange (event: MouseEvent, text: string, range?: IBufferRange | IViewportRange, rangeType?: 'buffer' | 'viewport') {
+    return this.options.hover?.(event, text, range, rangeType);
+  }
+
+  leaveWithOptionalRange (event: MouseEvent, text: string, range?: IBufferRange) {
+    return this.options.leave?.(event, text, range);
+  }
 }
 
 /**
@@ -162,7 +381,17 @@ export class TerminalElement extends HTMLElement {
   private subscriptions = new CompositeDisposable();
   private initializedPromise?: Promise<void>;
   private createdPromise?: Promise<void>;
+  private restartingPromise?: Promise<void>;
   private findPalette?: FindPalette;
+
+  // The bundle of subscriptions that manages all the transient items of a
+  // tooltip: the marker, the decoration, and the tooltip itself.
+  private tooltip?: CompositeDisposable;
+  // The range for which we are currently showing a tooltip.
+  private tooltipRange?: IBufferRange;
+
+  private linkHandler: TerminalLinkHandler;
+  private linkTooltip: DelayedPresence<TooltipMetadata>;
 
   // Object that holds the various elements.
   private div?: Record<'top' | 'main' | 'menu' | 'terminal' | 'palette', HTMLDivElement>;
@@ -173,6 +402,7 @@ export class TerminalElement extends HTMLElement {
   #terminalInitiallyVisible: boolean = false;
   #fitAddon?: FitAddon;
   #searchAddon?: SearchAddon;
+  #shellIntegrationAddon?: ShellIntegrationAddon;
   #webglAddon?: WebglAddon | null = null;
   #prioritizedPrefixes: string[] = [];
 
@@ -188,6 +418,28 @@ export class TerminalElement extends HTMLElement {
 
   static create () {
     return document.createElement(getElementName()) as TerminalElement;
+  }
+
+  constructor () {
+    super();
+
+    this.linkHandler = new TerminalLinkHandler({
+      activate: (event, text, range) => this.activateLink(event, text, range),
+      hover: (event, text, range) => this.hoverLink(event, text, range, 'buffer'),
+      leave: (event, text, range) => this.leaveLink(event, text, range)
+    });
+
+    this.linkTooltip = new DelayedPresence<TooltipMetadata>({
+      showDelay: atom.inSpecMode() ? 10 : 1000,
+      hideDelay: atom.inSpecMode() ? 10 : 100,
+      isSameKey: (a, b) => this.rangesAreEqual(a.range, b.range),
+      onShow: ({ range, uri, rangeType }) => {
+        return this.showHoverTooltip(range, uri, rangeType);
+      },
+      onHide: ({ range, uri }) => {
+        return this.hideHoverTooltip(range, uri);
+      }
+    })
   }
 
   async initialize (model: TerminalModel) {
@@ -242,21 +494,33 @@ export class TerminalElement extends HTMLElement {
       });
       this.#mainResizeObserver.observe(this.div.main);
 
+      // We wait for full visibility (not just `isIntersecting`) because
+      // `terminal.open()` measures character size off the live DOM.
+      //
+      // This costs ~935ms per element in CI: callbacks arrive on Chromium's
+      // rendering lifecycle, and `pulsar --test` never maps its window, so on
+      // Linux there's no frame sink and Chromium falls back to a ~1Hz timer.
+      // macOS is unaffected. No Xvfb or Chromium switch changes it; the fix
+      // would be to check visibility synchronously and keep the observer only
+      // for elements that aren't visible yet.
       this.#terminalIntersectionObserver = new IntersectionObserver(
         async (entries) => {
           let last = entries[entries.length - 1];
 
           if (last.intersectionRatio !== 1.0) return;
           this.#terminalInitiallyVisible = true;
+
+          // Disconnect _before_ awaiting `createTerminal() in order to shut
+          // down any possible race conditions.
+          this.#terminalIntersectionObserver?.disconnect();
+          this.#terminalIntersectionObserver = null;
+
           try {
             await this.createTerminal();
             initializeResolve();
           } catch (error) {
             initializeReject(error);
           }
-
-          this.#terminalIntersectionObserver?.disconnect();
-          this.#terminalIntersectionObserver = null;
         },
         {
           root: this,
@@ -295,29 +559,6 @@ export class TerminalElement extends HTMLElement {
           }
         )
       );
-
-      // Increase or decrease the font size when holding `Ctrl` and moving the
-      // mouse wheel up/down.
-      // TODO: Do we need this?
-      // this.div.terminal.addEventListener(
-      //   'wheel',
-      //   (event) => {
-      //     if (!event.ctrlKey) return;
-      //     if (!atom.config.get('editor.zoomFontWhenCtrlScrolling')) return;
-      //     let fontSizeSchema = atom.config.getSchema('terminal.appearance.fontSize');
-      //     event.stopPropagation();
-      //
-      //     let delta = event.deltaY < 0 ? 1 : -1;
-      //     let fontSize = Config.get('appearance.fontSize') + delta;
-      //     if (fontSize < fontSizeSchema.minimum) {
-      //       fontSize = fontSizeSchema.minimum;
-      //     } else if (fontSize > fontSizeSchema.maximum) {
-      //       fontSize = fontSizeSchema.maximum;
-      //     }
-      //     Config.set('appearance.fontSize', fontSize);
-      //   },
-      //   { capture: true }
-      // );
     } catch (error) {
       initializeReject!(error);
       throw error;
@@ -331,14 +572,251 @@ export class TerminalElement extends HTMLElement {
     return await this.initializedPromise;
   }
 
+  activateLink (event: MouseEvent, uri: string, _range?: IBufferRange) {
+    if (Config.get('behavior.requireModifierToOpenUrls')) {
+      let modifier = isMac() ? event.metaKey : event.ctrlKey;
+      if (!modifier) {
+        // Users get warned the first time they try to click a link without
+        // holding a modifier… but only the first time.
+        this.optionallyWarnAboutModifierlessClick();
+        return;
+      }
+    }
+
+    if (!uri.startsWith('file:')) {
+      // This is a URL, most likely. Hand it off to the system for opening in
+      // the user's default browser.
+      shell.openExternal(uri);
+      return;
+    }
+
+
+    // If we get this far, we're dealing with a file path. The way we respond
+    // to various paths depends upon the user's configuration.
+    const behavior = Config.get('behavior.localPathBehavior');
+    const openDirectoriesInPulsar = behavior === 'all-pulsar';
+    const openFilesInPulsar = behavior === 'all-pulsar' ||
+      behavior === 'dir-explorer-file-pulsar';
+
+    // Convert the `file://` URL to the format expected by Node APIs.
+    let linkPath;
+    try {
+      linkPath = fileURLToPath(uri);
+    } catch (err) {
+      console.warn('[terminal] Did not open malformed URI because it did not resolve to a path:', uri);
+      return;
+    }
+
+    // Nonexistent file paths don't have anything to handle.
+    if (!fs.existsSync(linkPath)) return;
+
+    // Decide what to do with this hyperlink based on configuration and
+    // whether the link points to a file or a directory.
+    let isDir = fs.lstatSync(linkPath).isDirectory();
+    let shouldOpenInPulsar = isDir ? openDirectoriesInPulsar : openFilesInPulsar;
+    if (shouldOpenInPulsar) {
+      this.openInPulsar(uri, isDir);
+    } else if (isDir) {
+      // The behavior of `shell.openExternal` for a directory will open a
+      // file explorer to the directory in question so the user can view its
+      // contents.
+      shell.openExternal(uri);
+    } else {
+      // We want to open the file's parent directory in the file explorer and
+      // select this specific file.
+      shell.showItemInFolder(linkPath);
+    }
+  }
+
+  // Immediately create and display a tooltip over the given range that
+  // contains the given URI.
+  showHoverTooltip (range: IBufferRange | IViewportRange, uri: string, rangeType: 'buffer' | 'viewport' = 'buffer') {
+    if (!this.terminal) return;
+
+    // To create the decoration that serves as our tooltip anchor element,
+    // we must first create a marker on the correct row. This marker is
+    // placed relative to where the cursor is right now.
+    let {
+      // This seems to correlate to the row offset that the cursor has
+      // _if_ the viewport is scrolled all the way to the bottom.
+      cursorY,
+      // This seems to correlate to how many lines are offscreen _if_ the
+      // viewport is scrolled all the way to the bottom.
+      baseY,
+      viewportY
+    } = this.terminal.buffer.active;
+
+    // The meaning of `range.start.(y|x)` differs based on where the range came
+    // from:
+    //
+    // * `IBufferRange` (OSC 8 links): 1-based index; absolute buffer position.
+    // * `IViewportRange` (plain URLs via `WebLinksAddon`): 0-based index;
+    //   relative to the current viewport's top row.
+    //
+    // `registerMarker`'s offset is always relative to the cursor's absolute
+    // buffer position, so we have to convert into that target space.
+    let markerY: number;
+    let x: number;
+    if (rangeType === 'viewport') {
+      markerY = range.start.y + viewportY - baseY - cursorY;
+      x = range.start.x;
+    } else {
+      markerY = range.start.y - (cursorY + baseY) - 1;
+      x = range.start.x - 1;
+    }
+
+    Logger.debug(`Placed marker on row:`, markerY, 'given range starting at', range.start.y, 'and cursorY', cursorY, 'and baseY', baseY);
+
+    let marker = this.terminal.registerMarker(markerY);
+    let decoration = this.terminal.registerDecoration({
+      x,
+      marker,
+      width: range.end.y === range.start.y ? (range.end.x - range.start.x + 1) : 1
+    });
+
+    // XTerm's documentation _claims_ to skip the registration of decorations
+    // when we're on the alt buffer (used by, e.g., `less` and `vim` and `top`
+    // and anything else complex enough to need the concept of a viewport and
+    // its own management of a scroll buffer).
+    //
+    // Yet it _does not_ actually skip in this scenario! This is good for us;
+    // it would be a lot harder to deliver hover tooltips without this
+    // mechanism. The only caveat is that it does unconditionally set `display:
+    // none` on all alt-buffer decorations rather than attempt to discern
+    // whether they're present in the viewport. (It would not matter in our
+    // case; this whole code path is triggered when a user mouses over a link,
+    // so we can assume that the link is present in the viewport!)
+    //
+    // A reading of the source code and the design of the decoration system
+    // suggests that this is a documentation bug rather than a code bug.
+    // Nothing about this has changed in the XTerm 6.1.0 beta, and we expect
+    // that it won't change in the future… but we do still guard against a lack
+    // of decoration just in case!
+    if (!decoration) return;
+
+    this.tooltip = new CompositeDisposable();
+    this.tooltip.add(new Disposable(() => {
+      decoration?.dispose();
+      marker?.dispose();
+    }));
+
+    let originalTooltip = this.tooltip;
+    // `onRender` isn't a one-shot "first paint" hook — XTerm calls it again
+    // on every subsequent repaint of this decoration (scroll, resize, cursor
+    // blink, etc.), for as long as it stays registered. Without the
+    // `tooltipAdded` guard below, each of those repaints would call
+    // `atom.tooltips.add` again, stacking up duplicate tooltip instances on
+    // the same element for a single hover.
+    let tooltipAdded = false;
+    decoration.onRender((elem) => {
+      if (!this.terminal) return;
+
+      // Guard against an old decoration trying to render.
+      if (this.tooltip !== originalTooltip) return;
+
+      // Explicitly remove any `none` value for `display` for the reasons
+      // described above. If XTerm thinks this decoration should be hidden,
+      // it's almost certainly wrong.
+      elem.style.display = '';
+
+      if (tooltipAdded) return;
+      tooltipAdded = true;
+
+      // All tooltip management is manual. We don't want to rely on a belief
+      // that `element` is being hovered by the mouse pointer (that's not safe
+      // to assume when a decoration spans multiple lines), so it's better to
+      // opt into `trigger: 'manual'` and have the tooltip appear instantly.
+      // The tooltip will be hidden later on by disposing the return value of
+      // `atom.tooltips.add` — which we do automatically.
+      //
+      // This is not a big problem! The only downside of manual triggering is
+      // that we lose built-in management of show/hide delay — but that's where
+      // `DelayedPresence` steps in.
+      this.tooltip?.add(atom.tooltips.add(elem, {
+        title: uri,
+        trigger: 'manual'
+      }));
+    });
+  }
+
+  // Immediately hide the active tooltip.
+  hideHoverTooltip (_range: TooltipMetadata['range'], _uri: string) {
+    this.tooltip?.dispose();
+    this.tooltipRange = undefined;
+  }
+
+  // Called when the user hovers over a link; schedules the showing of a
+  // tooltip.
+  hoverLink (_event: MouseEvent, uri: string, range?: IBufferRange | IViewportRange, rangeType: 'buffer' | 'viewport' = 'buffer') {
+    if (!this.terminal || !range) return;
+
+    this.tooltipRange = range;
+
+    // Upon first hover, we're prone to trigger a `leave` and an almost
+    // immediate `hover`. This might be the result of temporary confusion after
+    // the empty anchor element is created and placed underneath the mouse
+    // pointer.
+    //
+    // But whatever the cause, it means we're doing a sort of debouncing here.
+    // If we're in the second of two rapid calls to `hover`, then there will be
+    // an existing tooltip we want to preserve. This is why we have the
+    // infrastructure of `DelayedPresence` — to detect this case and keep a
+    // reliable state in our state machine.
+    this.linkTooltip.enter({ range, uri, rangeType });
+
+    // TODO: Ideally, we would prevent the link from being underlined on hover
+    // _if_ configuration is such that a modifier key must be held down to open
+    // a link. To do this in XTerm.js, we'd have to implement our own link
+    // provider _instead of_ WebLinksAddon, so this is annoying.
+    //
+    // It'd also only work for URLs in the terminal, not for OSC 8 links.
+  }
+
+  // Called when the user mouses away from a link; schedules the hiding of the
+  // tooltip.
+  leaveLink (_event: MouseEvent, uri: string, range?: IBufferRange) {
+    // Ideally, we get called with a range; that lets us know whether this is
+    // a fresh or stale request to hide the tooltip. But we'll fall back to the
+    // current active tooltip range, if one exists.
+    let operativeRange = range ?? this.tooltipRange;
+    if (!operativeRange) return;
+
+    // Trigger a delay-gated hiding of the tooltip. This will schedule the
+    // hiding but cancel it if a mouseover happens again during the `hideDelay`
+    // interval.
+    this.linkTooltip.leave({ range: operativeRange, uri });
+  }
+
+  /**
+   * Open the given URI within Pulsar.
+   *
+   * Exact behavior varies according to the user's configuration.
+   */
+  async openInPulsar (uri: string, isDirectory: boolean = false) {
+    let linkPath = fileURLToPath(uri);
+    let contains = atom.project.contains(linkPath);
+    if (isDirectory) {
+      if (!contains) {
+        // TODO: Open a new project for this folder.
+      } else {
+        // We can't reveal this item in the tree view programmatically… yet!
+        // But that is the goal.
+      }
+    } else {
+      // Whether the path is within the project or outside of it, we'll open it
+      // for editing in this window.
+      await atom.workspace.open(linkPath);
+    }
+  }
+
   getModel () {
     return this.model;
   }
 
   destroy () {
     this.pty?.kill();
-    this.#loseWebglContext();
     this.terminal?.dispose();
+    this.#loseWebglContext();
     this.subscriptions.dispose();
   }
 
@@ -500,7 +978,7 @@ export class TerminalElement extends HTMLElement {
 
     // If we get this far, the `cwd` on the model is invalid!
     if (this.model) {
-      this.model.cwd = undefined;
+      this.model.setCwd(undefined);
     }
 
     return undefined;
@@ -542,6 +1020,17 @@ export class TerminalElement extends HTMLElement {
     // the overrides so that a user could nonetheless change it to another
     // value in order to (e.g.) work around a bug in some other program.
     env['COLORTERM'] = 'truecolor';
+
+    // Metadata that helps distinguish this terminal for purposes of shell
+    // integration. This allows users to add custom initialization logic inside
+    // their own init scripts that targets our terminal specifically.
+    //
+    // Declared alongside `COLORTERM`, and for the same reason: these are
+    // claims we make about ourselves, so they must beat anything inherited —
+    // but they sit before the overrides so that a user who needs to pose as
+    // some other terminal can still do so.
+    env['TERM_PROGRAM'] = 'pulsar';
+    env['TERM_PROGRAM_VERSION'] = atom.getVersion();
 
     // Then copy overrides. (This allows something from the compulsory
     // deny-list to still be overridden.)
@@ -587,12 +1076,9 @@ export class TerminalElement extends HTMLElement {
     let xtermOptions: ITerminalOptions = {
       cursorBlink: true,
       overviewRuler: {
+        width: 15,
         showTopBorder: true,
         showBottomBorder: true,
-        // `.vertical-scrollbar` for editors is hard-coded to be 15px. This
-        // isn't native like that scrollbar is, but we can at least make it
-        // occupy similar dimensions.
-        width: 15
       },
       ...this.getExtraXTermOptions()
     };
@@ -645,12 +1131,55 @@ export class TerminalElement extends HTMLElement {
     });
   }
 
+  /**
+   * Activates a path detected by `LocalPathLinkProvider`. `targetPath` is
+   * already an absolute, filesystem-verified path (not a URI) by the time it
+   * reaches this method; resolution and validation both happen in the
+   * provider.
+   */
+  activateLocalPathLink (event: MouseEvent, targetPath: string, isDirectory: boolean, line?: number, column?: number) {
+    if (Config.get('behavior.requireModifierToOpenUrls')) {
+      let modifier = isMac() ? event.metaKey : event.ctrlKey;
+      if (!modifier) {
+        this.optionallyWarnAboutModifierlessClick();
+        return;
+      }
+    }
+
+    const behavior = Config.get('behavior.localPathBehavior');
+    const openDirectoriesInExplorer = isDirectory && behavior !== 'all-pulsar';
+    const openFilesInExplorer = !isDirectory && behavior === 'all-explorer';
+
+    if (openDirectoriesInExplorer || openFilesInExplorer) {
+      if (isDirectory) {
+        shell.openPath(targetPath);
+      } else {
+        shell.showItemInFolder(targetPath);
+      }
+    } else if (line !== undefined) {
+      // `initialLine`/`initialColumn` are 0-based; our parsed line/column
+      // numbers are 1-based, as printed by the tool that produced them.
+      atom.workspace.open(targetPath, {
+        initialLine: line - 1,
+        initialColumn: (column ?? 1) - 1
+      });
+    } else {
+      atom.workspace.open(targetPath);
+    }
+  }
+
+  /**
+   * Instantiates a new terminal.
+   *
+   * Async; if a terminal creation is already in flight, subsequent calls will
+   * return the promise tied to the existing terminal creation.
+   */
   async createTerminal () {
     if (this.createdPromise) {
-      await this.createdPromise;
+      return await this.createdPromise;
     }
     this.createdPromise = this.#createTerminal();
-    this.createdPromise.then(() => {
+    this.createdPromise.finally(() => {
       this.createdPromise = undefined;
     });
     return await this.createdPromise;
@@ -670,10 +1199,15 @@ export class TerminalElement extends HTMLElement {
     // wait for the shell before proceeding.
     await this.waitForShellEnvironment();
 
-    this.terminal = new XTerminal({
+    let options: ITerminalOptions = {
+      ...this.getXtermOptions(),
       allowProposedApi: true,
-      ...this.getXtermOptions()
-    });
+      linkHandler: this.linkHandler,
+    };
+
+    Logger.debug('Declaring new Terminal with options:', options);
+
+    this.terminal = new XTerminal(options);
 
     // TODO: Harmonize this with the custom key event handler below. This
     // approach is useful when the last key of a would-be key sequence is
@@ -701,16 +1235,11 @@ export class TerminalElement extends HTMLElement {
 
     if (Config.get('xterm.webLinks')) {
       this.terminal.loadAddon(
-        new WebLinksAddon(
-          (event, uri) => {
-            if (Config.get('behavior.requireModifierToOpenUrls')) {
-              let modifier = isMac() ? event.metaKey : event.ctrlKey;
-              if (!modifier) {
-                this.optionallyWarnAboutModifierlessClick();
-                return;
-              }
-            }
-            shell.openExternal(uri);
+        new WebLinksAddon(this.activateLink.bind(this), {
+            hover: (event, text, location) => {
+              this.linkHandler.hoverWithOptionalRange(event, text, location, 'viewport');
+            },
+            leave: this.linkHandler.leaveWithOptionalRange.bind(this.linkHandler)
           }
         )
       );
@@ -729,7 +1258,9 @@ export class TerminalElement extends HTMLElement {
         console.warn('terminal.xterm.webgl is true, but platform does not support WebGL');
       }
       if (this.#webglAddon) {
-        this.terminal.loadAddon(this.#webglAddon);
+        let webglAddon = this.#webglAddon;
+        webglAddon.onContextLoss(() => webglAddon.dispose());
+        this.terminal.loadAddon(webglAddon);
       }
     }
 
@@ -738,6 +1269,33 @@ export class TerminalElement extends HTMLElement {
     }
     this.#searchAddon = new SearchAddon();
     this.terminal.loadAddon(this.#searchAddon);
+
+    if (Config.get('terminal.enableShellIntegration')) {
+      this.#shellIntegrationAddon = new ShellIntegrationAddon();
+      this.terminal.loadAddon(this.#shellIntegrationAddon);
+      this.subscriptions.add(
+        this.#shellIntegrationAddon.onDidChangeCwd((cwd) => {
+          Logger.debug('Shell integration: cwd changed:', cwd);
+          if (this.model) this.model.setCwd(cwd);
+        }),
+        this.#shellIntegrationAddon.onDidExecuteCommand((command) => {
+          Logger.debug('Shell integration: command executing:', command);
+        }),
+        this.#shellIntegrationAddon.onDidFinishCommand((command) => {
+          Logger.debug('Shell integration: command finished:', command);
+        })
+      );
+    }
+
+    if (Config.get('xterm.localPathDetection')) {
+      this.terminal.registerLinkProvider(
+        new LocalPathLinkProvider(
+          this.terminal,
+          () => this.model?.getPath(),
+          (event, targetPath, isDirectory, line, column) => this.activateLocalPathLink(event, targetPath, isDirectory, line, column)
+        )
+      );
+    }
 
     // Attach a key event handler so that we get dibs on handling a given key
     // event before the terminal itself.
@@ -930,7 +1488,24 @@ export class TerminalElement extends HTMLElement {
     this.showNotification(message, 'info', { restartButtonText: 'Start' });
   }
 
+  /**
+   * Starts or restarts the PTY.
+   *
+   * Async; if a process restart is already in flight, subsequent calls will
+   * return the promise tied to the existing restart.
+   */
   async restartPtyProcess () {
+    if (this.restartingPromise) {
+      return await this.restartingPromise;
+    }
+    this.restartingPromise = this.#restartPtyProcess();
+    this.restartingPromise.finally(() => {
+      this.restartingPromise = undefined;
+    });
+    return await this.restartingPromise;
+  }
+
+  async #restartPtyProcess () {
     if (this.#ptyMeta?.running) {
       this.pty?.removeAllListeners('exit');
       this.pty?.kill();
@@ -941,12 +1516,27 @@ export class TerminalElement extends HTMLElement {
 
     this.terminal?.reset();
 
+    let command = this.getShellCommand();
+    let args = this.getArgs();
+    let env = this.getEnv();
+
+    let result = await getShellIntegrationInjection(command, args, env);
+    if (result.enabled) {
+      Logger.debug('Shell integration injected:', result.injection);
+      let injection = result.injection;
+      env = { ...env, ...injection.env };
+      args = injection.args;
+      this.#shellIntegrationAddon?.setNonce(injection.env.PULSAR_TERMINAL_NONCE);
+    } else {
+      Logger.debug('Shell integration not injected:', result.reason);
+      this.#shellIntegrationAddon?.setNonce(undefined);
+    }
+
     this.#ptyMeta.options ??= {};
-    this.#ptyMeta.command = this.getShellCommand();
-    this.#ptyMeta.args = this.getArgs();
+    this.#ptyMeta.command = command;
+    this.#ptyMeta.args = args;
 
     let name = this.getTerminalType();
-    let env = this.getEnv();
     let encoding = this.getEncoding();
 
     this.#ptyMeta.options = { name, cwd, env };
@@ -1109,6 +1699,24 @@ export class TerminalElement extends HTMLElement {
   show () {
     if (!this.div) return;
     this.div.terminal.style.visibility = 'visible';
+  }
+
+  pointsAreEqual (a: IBufferCellPosition, b: IBufferCellPosition) {
+    return a.x === b.x && a.y === b.y;
+  }
+
+  rangesAreEqual (a: IBufferRange | undefined, b: IBufferRange | undefined) {
+    if (!a || !b) return a === b;
+    return this.pointsAreEqual(a.start, b.start) && this.pointsAreEqual(a.end, b.end);
+  }
+
+  inspectPoint (cell: IBufferCellPosition) {
+    return `(${cell.x}, ${cell.y})`;
+  }
+
+  inspectRange (range: IBufferRange | undefined) {
+    if (!range) return `(undefined)`;
+    return `${this.inspectPoint(range.start)} - ${this.inspectPoint(range.end)}`;
   }
 }
 

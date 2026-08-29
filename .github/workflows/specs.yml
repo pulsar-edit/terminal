@@ -1,0 +1,31 @@
+name: "Specs"
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch: {}
+
+jobs:
+  specs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up the package
+        uses: ./.github/actions/setup
+
+      # `pulsar --test` launches a real (if automated) Electron window, so it
+      # needs a display server even though nothing here is visibly rendered.
+      #
+      # `options` becomes `xvfb-run -s ...`. Worth setting explicitly because
+      # `xvfb-run`'s default screen is 1280x1024x*8* — an 8-bit palette, which
+      # is a strange thing to ask Chromium to render into.
+      - name: Run specs
+        uses: coactions/setup-xvfb@v1.0.1
+        with:
+          options: "-screen 0 1920x1080x24"
+          run: pulsar --test spec/

@@ -1,4 +1,4 @@
-import { Disposable, Dock, Emitter, Pane, PaneItemLocation } from "atom";
+import { AbstractPaneItem, Disposable, Dock, Emitter, Pane, PaneItemLocation } from "atom";
 import { TerminalElement } from "./element";
 export type TerminalModelOptions = {
     terminals: Set<TerminalModel>;
@@ -9,7 +9,7 @@ export declare function isSafeSignal(signal: string): signal is Signal;
 /**
  * The representation of a terminal in the Pulsar workspace.
  */
-export declare class TerminalModel {
+export declare class TerminalModel implements AbstractPaneItem {
     #private;
     static is(other: unknown): other is TerminalModel;
     static recalculateActive(terminals: Set<TerminalModel>, active?: TerminalModel): void;
@@ -31,6 +31,7 @@ export declare class TerminalModel {
     constructor(options: TerminalModelOptions);
     get uri(): string;
     getInitialCwd(): Promise<string>;
+    setCwd(newCwd: string | undefined): void;
     initialize(): Promise<void>;
     serialize(): {
         deserializer: string;
@@ -50,6 +51,7 @@ export declare class TerminalModel {
     setElement(element: TerminalElement | undefined): void;
     onDidChangeTitle(callback: (newTitle: string) => unknown): Disposable;
     onDidChangeModified(callback: (newValue: boolean) => unknown): Disposable;
+    onDidChangePath(callback: (newPath: boolean) => unknown): Disposable;
     handleNewData(): void;
     isActive(): boolean;
     isVisible(): boolean;

@@ -1,6 +1,7 @@
 const Terminal = require('../lib/terminal');
 const { TERMINAL_ELEMENT_ATTRIBUTE } = require('../lib/element');
 const { URL } = require('url');
+const { PACKAGE_NAME } = require('../lib/utils');
 
 const {
   activatePackage,
@@ -206,7 +207,7 @@ describe('Terminal', () => {
     });
 
     it('runs commands in a new terminal if configured to do so', async () => {
-      atom.config.set('terminal.behavior.runInActive', false);
+      atom.config.set(`${PACKAGE_NAME}.behavior.runInActive`, false);
       await Terminal.runCommands(commands);
       expect(Terminal.getActiveTerminal).not.toHaveBeenCalled();
       expect(newTerminal.run).toHaveBeenCalledWith('command 1');
@@ -214,7 +215,7 @@ describe('Terminal', () => {
     });
 
     it('runs commands in the active terminal if configured to do so', async () => {
-      atom.config.set('terminal.behavior.runInActive', true);
+      atom.config.set(`${PACKAGE_NAME}.behavior.runInActive`, true);
       await Terminal.runCommands(commands);
       expect(Terminal.open).not.toHaveBeenCalled();
       expect(activeTerminal.run).toHaveBeenCalledWith('command 1');

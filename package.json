@@ -19,7 +19,8 @@
     "build": "rollup -c rollup.config.mjs",
     "watch": "rollup --watch -c rollup.config.mjs",
     "prepare": "node ./scripts/check-build-hash.mjs || npm run build",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "test:e2e": "playwright test"
   },
   "repository": "https://github.com/pulsar-edit/terminal",
   "license": "MIT",
@@ -48,6 +49,7 @@
     "which": "^5.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@rollup/plugin-commonjs": "^28.0.3",
     "@rollup/plugin-json": "^6.1.0",
     "@rollup/plugin-node-resolve": "^16.0.1",
