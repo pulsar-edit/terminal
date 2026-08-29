@@ -568,7 +568,13 @@ describe('TerminalElement', () => {
   });
 
   describe('warning about inactive clipboard keybindings', () => {
-    let keymapDisposable, removePlatformClass;
+    let keymapDisposable, originalPlatformClasses;
+
+    const PLATFORM_CLASSES = [
+      'platform-darwin',
+      'platform-win32',
+      'platform-linux'
+    ];
 
     // Dispatches a key event to the textarea that xterm.js listens on.
     // Returns the event so that specs can inspect whether xterm.js claimed it.
@@ -579,18 +585,30 @@ describe('TerminalElement', () => {
     }
 
     // Pulsar decides which keybindings apply by matching selectors against the
-    // DOM, and the package's own clipboard keybindings are scoped to
-    // `.platform-win32`/`.platform-linux`. Rather than pretend to be on
-    // another platform, we can add the class that those selectors look for.
+    // DOM, and clipboard keybindings — Pulsar's own as well as this package's
+    // — are scoped to `.platform-win32`/`.platform-linux`. The host platform
+    // puts one of these classes on `body` at startup, so these specs have to
+    // take control of it rather than assume it's absent: on a Linux CI runner
+    // the real `.platform-linux` bindings match, and specs that assert *no*
+    // clipboard binding applies would fail while passing on macOS.
+    //
+    // The block defaults to darwin, where clipboard commands are bound to Cmd
+    // and so never collide with what the terminal claims. Specs that want the
+    // Windows/Linux bindings ask for them explicitly.
     function pretendPlatformIs (platform) {
-      let className = `platform-${platform}`;
-      if (document.body.classList.contains(className)) return;
-      document.body.classList.add(className);
-      removePlatformClass = () => document.body.classList.remove(className);
+      for (let className of PLATFORM_CLASSES) {
+        document.body.classList.remove(className);
+      }
+      document.body.classList.add(`platform-${platform}`);
     }
 
     beforeEach(() => {
       atom.config.set('terminal.advanced.warnAboutClipboardKeybindings', true);
+
+      originalPlatformClasses = PLATFORM_CLASSES.filter(
+        className => document.body.classList.contains(className)
+      );
+      pretendPlatformIs('darwin');
 
       // Stand in for the clipboard keybindings that Pulsar's core keymap
       // defines on Windows and Linux. These are bound directly to
@@ -610,8 +628,14 @@ describe('TerminalElement', () => {
 
     afterEach(() => {
       keymapDisposable?.dispose();
-      removePlatformClass?.();
-      removePlatformClass = undefined;
+      // Restore whatever the host platform put there, however many times
+      // `pretendPlatformIs` was called during the spec.
+      for (let className of PLATFORM_CLASSES) {
+        document.body.classList.remove(className);
+      }
+      for (let className of originalPlatformClasses) {
+        document.body.classList.add(className);
+      }
     });
 
     it('warns when the terminal claims a keystroke bound to a clipboard command', () => {
@@ -664,6 +688,16 @@ describe('TerminalElement', () => {
           'ctrl-c': 'core:copy'
         }
       });
+
+      // TEMPORARY: this spec passes locally (macOS) and on a Linux host with
+      // the platform class forced, but fails in CI. Print every `ctrl-c`
+      // candidate so CI can name whichever binding is surviving the ancestor
+      // check there. Remove once that's identified.
+      let candidates = atom.keymaps.findMatchCandidates(['ctrl-c'], []).exactMatchCandidates;
+      console.log(
+        `[ctrl-c candidates] ${candidates.length}\n` +
+        candidates.map(kb => `  ${kb.source} | ${kb.selector} | ${kb.command}`).join('\n')
+      );
       pressKey({ ...KEYS.c, ctrlKey: true });
       expect(atom.notifications.addInfo).not.toHaveBeenCalled();
     });
