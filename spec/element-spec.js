@@ -683,22 +683,21 @@ describe('TerminalElement', () => {
     it('does not warn when the clipboard binding could not apply in this context', () => {
       keymapDisposable.dispose();
       // A binding that exists, but whose selector will never match a terminal.
+      //
+      // Uses `Ctrl+B` rather than `Ctrl+C` because Pulsar's own `linux.cson`
+      // binds `ctrl-c` to `core:copy` against plain `body` — which _does_
+      // match a terminal, so on Linux there'd be a second, genuinely
+      // applicable binding and the warning would fire for the right reasons.
+      // Pulsar picks that keymap by host platform when it loads, so unlike
+      // the `.platform-*` selectors it can't be faked away here. `ctrl-b` is
+      // only spoken for by `fuzzy-finder` and `tree-view`, neither of which
+      // is a clipboard command.
       keymapDisposable = atom.keymaps.add('clipboard-keybinding-spec', {
         'atom-text-editor': {
-          'ctrl-c': 'core:copy'
+          'ctrl-b': 'core:copy'
         }
       });
-
-      // TEMPORARY: this spec passes locally (macOS) and on a Linux host with
-      // the platform class forced, but fails in CI. Print every `ctrl-c`
-      // candidate so CI can name whichever binding is surviving the ancestor
-      // check there. Remove once that's identified.
-      let candidates = atom.keymaps.findMatchCandidates(['ctrl-c'], []).exactMatchCandidates;
-      console.log(
-        `[ctrl-c candidates] ${candidates.length}\n` +
-        candidates.map(kb => `  ${kb.source} | ${kb.selector} | ${kb.command}`).join('\n')
-      );
-      pressKey({ ...KEYS.c, ctrlKey: true });
+      pressKey({ ...KEYS.b, ctrlKey: true });
       expect(atom.notifications.addInfo).not.toHaveBeenCalled();
     });
 
