@@ -107,7 +107,8 @@ export default [{
       tsconfig: './tsconfig.json',
       sourceMap: true
     }),
-    json()
+    json(),
+    writeBuildHash()
   ],
   // Mark certain packages as external; this tells Rollup not to try to
   // transpile or bundle this package's code. CommonJS modules should

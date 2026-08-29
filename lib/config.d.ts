@@ -47,6 +47,13 @@ export declare function getConfigSchema(): {
                 default: string;
                 order: number;
             };
+            enableShellIntegration: {
+                title: string;
+                description: string;
+                type: string;
+                default: boolean;
+                order: number;
+            };
             env: {
                 title: string;
                 description: string;
@@ -92,6 +99,13 @@ export declare function getConfigSchema(): {
                 default: boolean;
             };
             webLinks: {
+                title: string;
+                description: string;
+                type: string;
+                order: number;
+                default: boolean;
+            };
+            localPathDetection: {
                 title: string;
                 description: string;
                 type: string;
@@ -251,6 +265,17 @@ export declare function getConfigSchema(): {
                 description: string;
                 type: string;
                 default: boolean;
+                order: number;
+            };
+            localPathBehavior: {
+                title: string;
+                description: string;
+                type: string;
+                enum: {
+                    value: string;
+                    label: string;
+                }[];
+                default: string;
                 order: number;
             };
         };

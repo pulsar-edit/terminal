@@ -8,6 +8,7 @@ import { CompositeDisposable, Emitter } from 'atom';
 import { IPtyForkOptions, IWindowsPtyForkOptions } from 'node-pty';
 import ndjson from 'ndjson';
 import { spawn, SpawnOptionsWithoutStdio, type ChildProcess } from 'child_process';
+import * as Logger from './log';
 
 import { Config } from './config';
 import { isWindows, timeout } from './utils';
@@ -130,6 +131,7 @@ export class Pty {
   constructor(options: PtySpawnOptions) {
     this.options = options;
     this.id = uid++;
+    Logger.initialize();
     this.start();
   }
 
@@ -201,9 +203,7 @@ export class Pty {
             Object.assign(this.meta, obj.payload);
             break;
           case 'log':
-            if (Config.get('advanced.enableDebugLogging')) {
-              console.log('[Terminal] [Worker]', obj.payload);
-            }
+            Logger.log(`[Worker]`, obj.payload);
             break;
           default:
             // Do nothing
