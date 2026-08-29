@@ -311,6 +311,124 @@ describe('Terminal', () => {
     });
   });
 
+  describe('open() with a `split` option', () => {
+    let center, terminals;
+
+    beforeEach(async () => {
+      jasmine.attachToDOM(atom.views.getView(atom.workspace));
+      center = atom.workspace.getCenter();
+      terminals = [];
+      // Start from a workspace center with a single pane and one item in it.
+      await atom.workspace.open();
+    });
+
+    afterEach(() => {
+      for (let terminal of terminals) {
+        terminal.destroy();
+      }
+    });
+
+    async function openWithSplit (split) {
+      let terminal = await Terminal.open(
+        Terminal.generateUri(),
+        { split, location: 'center' }
+      );
+      terminals.push(terminal);
+      return terminal;
+    }
+
+    // These two directions have always worked; they're here to describe the
+    // behavior that the other two directions should match.
+    it('creates a new pane below when splitting down', async () => {
+      let terminal = await openWithSplit('down');
+      let panes = center.getPanes();
+      expect(panes.length).toBe(2);
+      expect(panes[1].getItems()).toContain(terminal);
+    });
+
+    it('creates a new pane to the right when splitting right', async () => {
+      let terminal = await openWithSplit('right');
+      let panes = center.getPanes();
+      expect(panes.length).toBe(2);
+      expect(panes[1].getItems()).toContain(terminal);
+    });
+
+    it('creates a new pane above when splitting up', async () => {
+      let originalPane = center.getActivePane();
+      let terminal = await openWithSplit('up');
+      let panes = center.getPanes();
+      expect(panes.length).toBe(2);
+      expect(panes[0]).not.toBe(originalPane);
+      expect(panes[0].getItems()).toContain(terminal);
+      expect(originalPane.getItems()).not.toContain(terminal);
+    });
+
+    it('creates a new pane to the left when splitting left', async () => {
+      let originalPane = center.getActivePane();
+      let terminal = await openWithSplit('left');
+      let panes = center.getPanes();
+      expect(panes.length).toBe(2);
+      expect(panes[0]).not.toBe(originalPane);
+      expect(panes[0].getItems()).toContain(terminal);
+      expect(originalPane.getItems()).not.toContain(terminal);
+    });
+
+    it('reuses an existing pane above instead of creating another', async () => {
+      let topmostPane = center.getActivePane();
+      topmostPane.splitDown();
+      let terminal = await openWithSplit('up');
+      expect(center.getPanes().length).toBe(2);
+      expect(topmostPane.getItems()).toContain(terminal);
+    });
+
+    it('reuses an existing pane to the left instead of creating another', async () => {
+      let leftmostPane = center.getActivePane();
+      leftmostPane.splitRight();
+      let terminal = await openWithSplit('left');
+      expect(center.getPanes().length).toBe(2);
+      expect(leftmostPane.getItems()).toContain(terminal);
+    });
+
+    it('splits within the active dock', async () => {
+      let dock = atom.workspace.getBottomDock();
+      let terminal = await Terminal.open(
+        Terminal.generateUri(),
+        { location: 'bottom' }
+      );
+      terminals.push(terminal);
+      expect(dock.getPanes().length).toBe(1);
+
+      let splitTerminal = await Terminal.open(
+        Terminal.generateUri(),
+        { split: 'up', location: 'bottom' }
+      );
+      terminals.push(splitTerminal);
+
+      let panes = dock.getPanes();
+      expect(panes.length).toBe(2);
+      expect(panes[0].getItems()).toContain(splitTerminal);
+      expect(center.getPanes().length).toBe(1);
+    });
+
+    it('does not leave an empty pane behind if the item never opens', async () => {
+      spyOn(atom.workspace, 'open').andReturn(Promise.resolve(undefined));
+      await Terminal.open(Terminal.generateUri(), { split: 'up', location: 'center' });
+      expect(center.getPanes().length).toBe(1);
+    });
+
+    it('does not leave an empty pane behind if opening fails', async () => {
+      spyOn(atom.workspace, 'open').andReturn(Promise.reject(new Error('nope')));
+      let error;
+      try {
+        await Terminal.open(Terminal.generateUri(), { split: 'up', location: 'center' });
+      } catch (err) {
+        error = err;
+      }
+      expect(error).toBeDefined();
+      expect(center.getPanes().length).toBe(1);
+    });
+  });
+
   describe('openInCenterOrDock()', () => {
     beforeEach(() => {
       spyOn(atom.workspace, 'open');

@@ -36,6 +36,13 @@ function isValidLocation(str: string): str is WorkspaceOpenLocation {
 
 type FocusTarget = { type: 'item', item: PaneItem } | { type: 'element', element: HTMLElement };
 
+// `Pane` knows how to find the outermost sibling pane in a given direction,
+// but these methods aren't present in the type definitions.
+type PaneWithSiblingLookup = Pane & {
+  findTopmostSibling (): Pane;
+  findLeftmostSibling (): Pane;
+};
+
 export default class Terminal {
   static previousFocus: FocusTarget | null = null;
 
@@ -426,9 +433,77 @@ export default class Terminal {
       }
     }
 
+    // `atom.workspace.open` won't create a new pane when asked to split up or
+    // to the left, so we may have to create it ourselves.
+    let createdPane = this.createPaneForSplit(options);
+    if (createdPane) {
+      options.pane = createdPane;
+      delete options.split;
+    }
+
     Logger.debug('Opening terminal with options:', options, url.href);
 
-    return await atom.workspace.open(url.href, options) as Promise<TerminalModel>;
+    try {
+      let item = await atom.workspace.open(url.href, options) as TerminalModel;
+      if (!item) this.destroyPaneIfEmpty(createdPane);
+      return item;
+    } catch (err) {
+      this.destroyPaneIfEmpty(createdPane);
+      throw err;
+    }
+  }
+
+  // `atom.workspace.open` creates a new pane when asked to split `down` or
+  // `right`, but not when asked to split `up` or `left`; in those directions,
+  // when there's no existing sibling pane to target, it silently opens the
+  // item in the current pane instead. (Compare `Pane::findTopmostSibling` to
+  // `Pane::findOrCreateBottommostSibling` in the Pulsar source.)
+  //
+  // We can't fix that asymmetry without changing the behavior of
+  // `Workspace::open` for everyone, but we can work around it here: when
+  // `atom.workspace.open` would decline to make a new pane, we make one
+  // ourselves and tell it to use that pane instead.
+  //
+  // Returns the newly created pane, or `undefined` if we didn't need to create
+  // one.
+  static createPaneForSplit (options: OpenOptions): Pane | undefined {
+    if (options.pane) return undefined;
+    if (options.split !== 'up' && options.split !== 'left') return undefined;
+
+    let container = this.getWorkspaceLocationContainer(options.location);
+    let pane = container?.getActivePane() as PaneWithSiblingLookup | undefined;
+    if (!pane) return undefined;
+
+    // If a pane already exists in that direction, `atom.workspace.open` will
+    // do the right thing on its own.
+    let sibling = options.split === 'up' ?
+      pane.findTopmostSibling() :
+      pane.findLeftmostSibling();
+    if (sibling !== pane) return undefined;
+
+    return options.split === 'up' ? pane.splitUp() : pane.splitLeft();
+  }
+
+  // If we created a pane in anticipation of an item that never arrived, clean
+  // it up instead of leaving an empty pane behind.
+  static destroyPaneIfEmpty (pane?: Pane) {
+    if (!pane || pane.getItems().length > 0) return;
+    pane.destroy();
+  }
+
+  static getWorkspaceLocationContainer (location?: string) {
+    switch (location) {
+      case 'center':
+        return atom.workspace.getCenter();
+      case 'bottom':
+        return atom.workspace.getBottomDock();
+      case 'left':
+        return atom.workspace.getLeftDock();
+      case 'right':
+        return atom.workspace.getRightDock();
+      default:
+        return atom.workspace.getActivePaneContainer();
+    }
   }
 
   static getActiveWorkspaceLocation(activeContainer?: Dock | WorkspaceCenter) {

@@ -23,6 +23,9 @@ export default class Terminal {
     static inferTerminalModel(event?: CommandEvent): TerminalModel | undefined;
     static inferTerminalElement(event: CommandEvent): TerminalElement | null;
     static open(uri: string, rawOptions?: OpenOptions): Promise<TerminalModel>;
+    static createPaneForSplit(options: OpenOptions): Pane | undefined;
+    static destroyPaneIfEmpty(pane?: Pane): void;
+    static getWorkspaceLocationContainer(location?: string): Dock | WorkspaceCenter;
     static getActiveWorkspaceLocation(activeContainer?: Dock | WorkspaceCenter): "left" | "right" | "bottom" | "center" | undefined;
     static close(): void;
     static restart(event?: CommandEvent): void;
