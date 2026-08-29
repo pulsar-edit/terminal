@@ -1,3 +1,4 @@
+import { KeyBinding } from 'atom';
 import { Signal, TerminalModel } from './model';
 import { IBufferCellPosition, IBufferRange, ITerminalOptions, ITheme, IViewportRange, Terminal as XTerminal } from '@xterm/xterm';
 import { Pty } from './pty';
@@ -33,6 +34,7 @@ export declare class TerminalElement extends HTMLElement {
     private createdPromise?;
     private restartingPromise?;
     private findPalette?;
+    private warnAboutClipboardKeybindings;
     private tooltip?;
     private tooltipRange?;
     private linkHandler;
@@ -68,6 +70,9 @@ export declare class TerminalElement extends HTMLElement {
     getXtermOptions(): ITerminalOptions;
     setMainBackgroundColor(theme?: ITheme): void;
     optionallyWarnAboutModifierlessClick(): void;
+    optionallyWarnAboutClipboardKeybindings(binding: KeyBinding): void;
+    buildKeybindingListForClipboardActions(): string;
+    keyBindingForCommand(command: string, ownBindingsOnly?: boolean): KeyBinding | null;
     /**
      * Activates a path detected by `LocalPathLinkProvider`. `targetPath` is
      * already an absolute, filesystem-verified path (not a URI) by the time it

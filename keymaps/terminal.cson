@@ -79,6 +79,11 @@
   # Ordinarily we'd bind an unfocus command to Esc — but Esc in particular
   # seems to stubbornly be claimed by Xterm, even if modifier keys are present!
   "ctrl-`": "terminal:unfocus"
+  # Linux and Windows get alternative keybindings for clipboard actions; this
+  # is common on GUI terminals on both platforms, since the standard
+  # keybindings clash with inherent terminal keybindings.
+  "ctrl-shift-c": "core:copy"
+  "ctrl-shift-v": "core:paste"
 
 ".platform-win32 .terminal-find-palette atom-text-editor, .platform-linux .terminal-find-palette atom-text-editor":
   # Ensure these shortcuts work equally well whether the terminal or the "find"

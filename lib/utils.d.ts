@@ -44,3 +44,5 @@ export declare function timeout(promise: Promise<unknown>, timeoutMs?: number, {
 export declare function debounce(callback: (...args: unknown[]) => void, waitMs?: number): (...args: unknown[]) => void;
 export declare function generateUri(params?: Record<string, string>): string;
 export declare function parseEnvConfigValue(rawJson: string): Record<string, string>;
+export declare function humanizeKeystroke(keystroke: string, mac?: boolean): string;
+export declare function keystrokeToHTML(keystroke: string, mac?: boolean): string;

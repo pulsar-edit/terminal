@@ -23,6 +23,7 @@ import {
   getElementName,
   isMac,
   isWindows,
+  keystrokeToHTML,
   PACKAGE_NAME,
   parseEnvConfigValue,
   timeout,
@@ -58,6 +59,12 @@ import { shell } from '@electron/remote';
 import { getShellIntegrationInjection } from './shell-integration';
 import { ShellIntegrationAddon } from './shell-integration/addon';
 import { LocalPathLinkProvider } from './link-detection/provider';
+
+// `core:cut` is omitted because it has no meaning in a terminal.
+const CLIPBOARD_COMMANDS = new Set([
+  'core:copy',
+  'core:paste'
+]);
 
 /**
  * Given a line height and a font size, attempts to adjust the line height so
@@ -383,6 +390,7 @@ export class TerminalElement extends HTMLElement {
   private createdPromise?: Promise<void>;
   private restartingPromise?: Promise<void>;
   private findPalette?: FindPalette;
+  private warnAboutClipboardKeybindings: boolean = false;
 
   // The bundle of subscriptions that manages all the transient items of a
   // tooltip: the marker, the decoration, and the tooltip itself.
@@ -556,6 +564,12 @@ export class TerminalElement extends HTMLElement {
           'terminal.behavior.prioritizedCommands',
           (newValue: string[]) => {
             this.#prioritizedPrefixes = newValue;
+          }
+        ),
+        atom.config.observe(
+          'terminal.advanced.warnAboutClipboardKeybindings',
+          (newValue: boolean) => {
+            this.warnAboutClipboardKeybindings = newValue;
           }
         )
       );
@@ -854,6 +868,10 @@ export class TerminalElement extends HTMLElement {
     return Config.get('terminal.terminalType');
   }
 
+  #bindingMatchesAncestorChain (kb: KeyBinding, ancestorChain: HTMLElement[]) {
+    return ancestorChain.some(node => node?.matches(kb.selector));
+  }
+
   #shouldPrioritizeBinding (kb: KeyBinding, ancestorChain?: HTMLElement[]) {
     let matchesPrioritizedPrefix = this.#prioritizedPrefixes.some(prefix => {
       if (prefix.endsWith(':')) return kb.command.startsWith(prefix);
@@ -869,7 +887,7 @@ export class TerminalElement extends HTMLElement {
       //
       // Eventually, we won't need to do this manually, and will instead be able
       // to ask `atom.keymaps` for this information.
-      if (!ancestorChain.some(node => node?.matches(kb.selector))) return false;
+      if (!this.#bindingMatchesAncestorChain(kb, ancestorChain)) return false;
 
       Logger.log('Prioritizing binding for command', kb.command, 'because our DOM context matches the selector', kb.selector);
     } else {
@@ -934,13 +952,7 @@ export class TerminalElement extends HTMLElement {
     let target = event.target as HTMLElement | null;
     if (!target) return false;
 
-    let ancestorChain: HTMLElement[] = [];
-    let node: HTMLElement | null = target;
-    while (node && node.matches) {
-      ancestorChain.push(node);
-      if (node.parentNode === document) break;
-      node = node.parentNode as HTMLElement | null;
-    }
+    let ancestorChain = this.#buildAncestorChain(target);
 
     let result = bindings.exactMatchCandidates.some((kb: KeyBinding) => this.#shouldPrioritizeBinding(kb, ancestorChain));
 
@@ -948,6 +960,31 @@ export class TerminalElement extends HTMLElement {
       Logger.log('Assuming control of keybinding:', keystroke, 'because it matches at least one Pulsar binding');
     }
     return result;
+  }
+
+  #buildAncestorChain (node: HTMLElement | null) {
+    let results: HTMLElement[] = [];
+    while (node && node.matches) {
+      results.push(node);
+      if (node.parentNode === document) break;
+      node = node.parentNode as HTMLElement | null;
+    }
+    return results;
+  }
+
+  #clipboardBindingForKeyboardEvent (event: KeyboardEvent) {
+    let keystroke = atom.keymaps.keystrokeForKeyboardEvent(event);
+    // @ts-ignore Undocumented.
+    let bindings = atom.keymaps.findMatchCandidates([keystroke], []);
+
+    let ancestorChain = this.#buildAncestorChain(this);
+
+    return bindings.exactMatchCandidates.find((kb: KeyBinding) => {
+      if (!this.#bindingMatchesAncestorChain(kb, ancestorChain)) {
+        return false;
+      }
+      return CLIPBOARD_COMMANDS.has(kb.command);
+    });
   }
 
   // Ensures the given path exists and points to a valid directory on disk.
@@ -1118,7 +1155,7 @@ export class TerminalElement extends HTMLElement {
     }
     Config.set('advanced.warnAboutModifierWhenOpeningUrls', false);
     atom.notifications.addInfo(`Terminal: Click ignored`, {
-      description: `For security and protection against accidental clicks, you must hold <kbd>${isMac() ? 'Cmd' : 'Ctrl'}</kbd> while clicking URLs in order to open them in your browser. You may disable this requirement in the package settings. (This message will be shown only once.)`,
+      description: `For security and protection against accidental clicks, you must hold <kbd>${isMac() ? 'Cmd' : 'Ctrl'}</kbd> while clicking URLs in order to open them in your browser. You may disable this requirement in the package settings.\n\n**(This message will be shown only once.)**`,
       dismissable: true,
       buttons: [
         {
@@ -1129,6 +1166,63 @@ export class TerminalElement extends HTMLElement {
         }
       ]
     });
+  }
+
+  optionallyWarnAboutClipboardKeybindings (binding: KeyBinding) {
+    if (!Config.get('advanced.warnAboutClipboardKeybindings')) {
+      return;
+    }
+    let { keystrokes, command } = binding;
+    Config.set('advanced.warnAboutClipboardKeybindings', false);
+    let list = this.buildKeybindingListForClipboardActions();
+    atom.notifications.addInfo(`Terminal: Clipboard keybinding inactive`, {
+      description: `The keystroke ${keystrokeToHTML(keystrokes)} is ordinarily bound to the \`${command}\` clipboard command, but has special meaning when the terminal has focus. ${list}\n\n**(This message will be shown only once.)**`,
+      dismissable: true,
+      buttons: [
+        {
+          text: 'Open Terminal Settings',
+          onDidClick () {
+            atom.workspace.open(`atom://config/packages/${PACKAGE_NAME}`);
+          }
+        }
+      ]
+    });
+  }
+
+  buildKeybindingListForClipboardActions () {
+    let listItems: string[] = [];
+    for (let command of CLIPBOARD_COMMANDS) {
+      let binding = this.keyBindingForCommand(command, true);
+      if (!binding) continue;
+      listItems.push(`* \`${command}\`: ${keystrokeToHTML(binding.keystrokes)}`);
+    }
+    if (listItems.length === 0) {
+      // This code path is unlikely to be reached. One possibility would be if
+      // a user defined a custom keybinding for `core:copy` or `core:paste` to
+      // match what it is on other platforms (muscle memory?).
+      //
+      // That's why this feature is still present and active on macOS, even
+      // though the native keybindings for clipboard actions do not clash with
+      // terminal keybindings. The only difference is that we don't try to map
+      // alternative keybindings for copy/paste on macOS, so we have nothing
+      // toward which to nudge people in this (extremely uncommon) situation.
+      return '\n\nThere are no special keybindings defined on this platform for clipboard management (since the default bindings do not clash with terminal bindings) but you may define your own in your `keymap.cson` by targeting the `pulsar-terminal` selector.';
+    }
+
+    return `\n\nWhen the terminal has focus, you may use these keybindings instead:\n\n${listItems.join('\n')}\n\nYou may rebind these keys in your \`keymap.cson\` if you prefer.`;
+  }
+
+  keyBindingForCommand (command: string, ownBindingsOnly = false) {
+    let bindings = atom.keymaps.findKeyBindings({ command, target: this });
+    bindings = bindings.filter(kb => kb.enabled !== false);
+
+    if (ownBindingsOnly) {
+      let packagePath = atom.packages.getLoadedPackage(PACKAGE_NAME)?.path;
+      if (!packagePath) return null;
+      bindings = bindings.filter(kb => kb.source?.startsWith(packagePath));
+    }
+
+    return bindings[0] ?? null;
   }
 
   /**
@@ -1213,6 +1307,24 @@ export class TerminalElement extends HTMLElement {
     // approach is useful when the last key of a would-be key sequence is
     // swallowed by xterm.js.
     this.terminal.onKey((event) => {
+      let { ctrlKey, altKey, metaKey } = event.domEvent;
+      if (
+        this.warnAboutClipboardKeybindings &&
+        event.domEvent.type === 'keydown' &&
+        (ctrlKey || altKey || metaKey)
+      ) {
+        // Detect cases where (a) this keystroke matches a binding that is
+        // valid for some sort of clipboard action in some context; (b)
+        // XTerm.js handled it instead, meaning that this keystroke has a
+        // different function within a terminal.
+        //
+        // In practice this should catch `Ctrl+C`, `Ctrl+V`, etc., but also be
+        // generic enough to work for other bindings.
+        let clipboardBinding = this.#clipboardBindingForKeyboardEvent(event.domEvent);
+        if (clipboardBinding) {
+          this.optionallyWarnAboutClipboardKeybindings(clipboardBinding);
+        }
+      }
       // Take keys that were already handled by xterm.js and handle them again
       // in Pulsar.
       //
